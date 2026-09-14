@@ -2,45 +2,53 @@
 chcp 65001 >nul
 title SLUGA Agent Setup (Windows)
 
-echo =================================================================
-echo    SLUGA AI Agent - Master Ustanovki (Windows)
-echo =================================================================
-
 cd /d "%~dp0"
 
-:: 1. Proverka Python
+:: Попытка запуска через PowerShell с обходом ExecutionPolicy
+powershell -ExecutionPolicy Bypass -NoProfile -File "%~dp0setup.ps1"
+if %errorlevel% equ 0 goto :eof
+
+echo.
+echo [!] PowerShell вернул ошибку, переключаемся на базовый командный режим...
+echo =================================================================
+echo    SLUGA AI Agent - Базовая установка (Windows CMD)
+echo =================================================================
+
+:: 1. Проверка Python
 python --version >nul 2>&1
 if errorlevel 1 (
-    echo [ERROR] Python ne nayden! Pozhaluysta, ustanovite Python 3.9+ i dobavte v PATH.
+    echo [ERROR] Python не найден! Установите Python 3.9+ с сайта python.org и добавьте в PATH.
     pause
     exit /b 1
 )
 
-:: 2. Sozdanie venv
+:: 2. Создание venv
 if not exist ".venv" (
-    echo [*] Sozdanie virtualnogo okruzheniya .venv...
+    echo [*] Создание виртуального окружения .venv...
     python -m venv .venv
 )
 
-:: 3. Ustanovka zavisimostey
-echo [*] Ustanovka zavisimostey...
+:: 3. Установка зависимостей
+echo [*] Установка зависимостей...
 call .venv\Scripts\activate.bat
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip -q
+pip install -r requirements.txt -q
 
-:: 4. Nastroyka .env
+:: 4. Настройка .env
 if not exist ".env" (
     copy .env.example .env >nul
-    echo [*] Sozdan fayl .env
+    echo [*] Создан файл .env
 )
+
+if not exist "data" mkdir data
 
 echo.
 echo =================================================================
-echo [OK] Ustanovka uspeshno zavershena!
+echo [OK] Установка успешно завершена!
 echo.
-echo Dlya zapuska servera vypolnite:
+echo Для запуска сервера выполните:
 echo   start.bat
-echo ili
+echo или
 echo   .venv\Scripts\python.exe main.py start
 echo =================================================================
 pause
