@@ -1,0 +1,27 @@
+# Базы данных и персональные данные
+.env
+*.env
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/uploads/*
+!data/uploads/.gitkeep
+data/audio/*
+!data/audio/.gitkeep
+
+# Python окружение и кэш
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+*.log
