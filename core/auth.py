@@ -29,6 +29,7 @@ def generate_bot_token(prefix: str = "sluga") -> str:
 def verify_bot_token(incoming_token: str) -> bool:
     """
     Безопасная сверка токена через hmac.compare_digest (защита от timing attacks).
+    Токен берется исключительно из текущей конфигурации .env.
     """
     if not incoming_token:
         return False
@@ -36,7 +37,9 @@ def verify_bot_token(incoming_token: str) -> bool:
     clean_incoming = incoming_token.strip()
     configured_token = getattr(settings, "sluga_bot_token", "sluga-core-token").strip()
 
-    # Сравнение константного времени
+    if not configured_token or configured_token == "sluga-core-token":
+        return False
+
     return hmac.compare_digest(clean_incoming, configured_token)
 
 

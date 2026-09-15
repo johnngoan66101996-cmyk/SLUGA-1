@@ -96,7 +96,7 @@ while true; do
     read -p "   Введите свой токен (или нажмите ENTER для автогенерации): " USER_TOKEN
     
     if [ -z "$USER_TOKEN" ]; then
-        if [ -n "$CURRENT_TOKEN" ] && [ "$CURRENT_TOKEN" != "sluga-7722-e4a8b1" ]; then
+        if [ -n "$CURRENT_TOKEN" ] && [ "$CURRENT_TOKEN" != "sluga-7722-e4a8b1" ] && [ "$CURRENT_TOKEN" != "sluga-your-bot-token-here" ] && [ "$CURRENT_TOKEN" != "sluga-core-token" ]; then
             FINAL_TOKEN="$CURRENT_TOKEN"
         else
             FINAL_TOKEN=$($PYTHON_BIN -c "import secrets; print(f'sluga-{secrets.token_hex(2)}-{secrets.token_hex(3)}')")
@@ -116,7 +116,7 @@ echo ""
 # ------------------------------------------------------------------------------
 # ШАГ 4: Настройка ключа LiteAI и выбор модели
 # ------------------------------------------------------------------------------
-echo "🔹 [ШАГ 4/5] Настройка шлюза LiteAI (https://liteai.tech)..."
+echo "🔹 [ШАГ 4/6] Настройка шлюза LiteAI (https://liteai.tech)..."
 CURRENT_KEY=$(grep -E "^LITEAI_API_KEY=" .env | cut -d '=' -f2- || true)
 
 if [ -z "$CURRENT_KEY" ] || [ "$CURRENT_KEY" == "sk-bf-your-api-key-here" ]; then
@@ -153,11 +153,128 @@ echo "   ✅ Установлена модель: $SELECTED_MODEL"
 echo ""
 
 # ------------------------------------------------------------------------------
-# ШАГ 5: Запуск сервера и фонового режима
+# ШАГ 5: Способ связи со SlugaGram (обход локальной сети)
 # ------------------------------------------------------------------------------
-echo "🔹 [ШАГ 5/5] Запуск серверного агента..."
-
+echo "🔹 [ШАГ 5/6] Выбор способа связи с мобильным приложением SlugaGram..."
 SERVER_IP=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "IP_СЕРВЕРА")
+
+echo "   Как ваш телефон будет связываться с агентом:"
+echo "   [1] Собственный домен и Reverse Proxy (HTTPS / WSS, порт 443)"
+echo "       -> Рекомендуется для хостинга (SpaceWeb и др.) или VPS со своим доменом."
+echo "       -> Автоматически компилирует и создает .htaccess и Nginx-конфиг."
+echo "   [2] Cloudflare Zero-Trust Tunnel (cloudflared)"
+echo "       -> Работает на любом ПК/сервере БЕЗ белого IP и без открытия портов."
+echo "       -> Автоматически скачивает cloudflared и создает скрипт туннеля."
+echo "   [3] Прямой IP / Локальная сеть (ws://${SERVER_IP}:8080/ws)"
+echo ""
+read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
+
+FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
+
+case "$NET_CHOICE" in
+    2)
+        echo ""
+        echo "   ⚡ Настройка Cloudflare Zero-Trust Tunnel..."
+        mkdir -p tools 2>/dev/null || true
+        ARCH=$(uname -m)
+        CF_URL=""
+        if [ "$ARCH" = "x86_64" ]; then
+            CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+        elif [[ "$ARCH" =~ "arm" ]] || [ "$ARCH" = "aarch64" ]; then
+            CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+        fi
+
+        if [ -n "$CF_URL" ] && [ ! -f "tools/cloudflared" ]; then
+            echo "   📥 Скачивание cloudflared..."
+            curl -L -s --max-time 30 "$CF_URL" -o tools/cloudflared 2>/dev/null || true
+            chmod +x tools/cloudflared 2>/dev/null || true
+        fi
+
+        cat << 'EOF' > start_tunnel.sh
+#!/usr/bin/env bash
+if [ -f "./tools/cloudflared" ]; then
+    ./tools/cloudflared tunnel --url http://127.0.0.1:8080
+else
+    cloudflared tunnel --url http://127.0.0.1:8080
+fi
+EOF
+        chmod +x start_tunnel.sh 2>/dev/null || true
+        echo "   ✅ Скрипт туннеля создан: ./start_tunnel.sh"
+        FINAL_CLIENT_URL="wss://<ВАШ-CLOUDFLARE-ДОМЕН>/ws"
+        ;;
+
+    3)
+        echo "   ✅ Выбран прямой IP: ws://${SERVER_IP}:8080/ws"
+        FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
+        ;;
+
+    *)
+        echo ""
+        echo "   🌐 Настройка Reverse Proxy (.htaccess / Nginx)..."
+        read -p "   Введите ваш домен (например, sugatov-it.ru) [ENTER для авто]: " USER_DOMAIN
+        if [ -z "$USER_DOMAIN" ]; then
+            USER_DOMAIN="ваш-домен.ru"
+        fi
+
+        # Генерация .htaccess для Apache / SpaceWeb
+        HTACCESS_CONTENT="<IfModule mod_rewrite.c>
+RewriteEngine On
+
+# 1. Проксирование WebSocket соединения SlugaGram
+RewriteCond %{HTTP:Upgrade} =websocket [NC]
+RewriteRule ^ws(.*) ws://127.0.0.1:8080/ws$1 [P,L]
+
+# 2. Проксирование REST API и синтеза речи
+RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+RewriteRule ^api/(.*) http://127.0.0.1:8080/api/$1 [P,L]
+</IfModule>"
+
+        # Ищем папку public_html на хостинге
+        TARGET_WEB_DIR=""
+        for candidate in "$SCRIPT_DIR/public_html" "$SCRIPT_DIR/../public_html" "$SCRIPT_DIR/../../public_html" "$HOME/public_html" "$HOME/$USER_DOMAIN/public_html"; do
+            if [ -d "$candidate" ]; then
+                TARGET_WEB_DIR="$candidate"
+                break
+            fi
+        done
+
+        if [ -n "$TARGET_WEB_DIR" ]; then
+            echo "$HTACCESS_CONTENT" > "$TARGET_WEB_DIR/.htaccess"
+            echo "   ✅ Файл .htaccess автоматически скомпилирован в: $TARGET_WEB_DIR/.htaccess"
+        else
+            echo "$HTACCESS_CONTENT" > .htaccess
+            echo "   ✅ Файл .htaccess скомпилирован в текущей папке: $(pwd)/.htaccess"
+            echo "   (Скопируйте его в корень вашего сайта public_html)"
+        fi
+
+        # Создаем также конфиг для Nginx (на случай VPS)
+        cat << EOF > nginx_sluga.conf
+# Конфигурация Nginx для проксирования SLUGA Agent
+location /ws {
+    proxy_pass http://127.0.0.1:8080/ws;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_read_timeout 86400s;
+}
+
+location /api/ {
+    proxy_pass http://127.0.0.1:8080/api/;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+}
+EOF
+        echo "   ✅ Nginx-шаблон сохранен в: nginx_sluga.conf"
+        FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
+        ;;
+esac
+echo ""
+
+# ------------------------------------------------------------------------------
+# ШАГ 6: Запуск сервера и фонового режима
+# ------------------------------------------------------------------------------
+echo "🔹 [ШАГ 6/6] Запуск серверного агента..."
 
 # Проверка: есть ли systemd и sudo
 if [ "$HAS_SUDO" = true ] && command -v systemctl &> /dev/null; then
@@ -208,12 +325,12 @@ echo ""
 echo "================================================================="
 echo "   🎉 УСТАНОВКА И НАСТРОЙКА SLUGA УСПЕШНО ЗАВЕРШЕНЫ!"
 echo "================================================================="
-echo "📱 ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ В ПРИЛОЖЕНИИ (псевдо-Телеграм):"
-echo "   • Адрес сервера (WebSocket) : ws://${SERVER_IP}:8080/ws"
+echo "📱 ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ В ПРИЛОЖЕНИИ SLUGAGRAM (на телефоне):"
+echo "   • Адрес сервера (WebSocket) : ${FINAL_CLIENT_URL}"
 echo "   • Токен связи с ботом       : ${FINAL_TOKEN}"
 echo "   • Выбранная модель          : ${SELECTED_MODEL}"
 echo ""
-echo "⚡ Команды управления:"
+echo "⚡ Команды управления сервером:"
 echo "   • Просмотр логов:   tail -f sluga_server.log"
 echo "   • Проверка статуса: python main.py status"
 echo "   • Новый токен:      python main.py reset-token"

@@ -90,7 +90,7 @@ if (Test-Path ".env") {
 
 $userToken = Read-Host "   Введите свой токен (или нажмите ENTER для автогенерации)"
 if ([string]::IsNullOrWhiteSpace($userToken)) {
-    if (-not [string]::IsNullOrWhiteSpace($currentToken) -and $currentToken -ne "sluga-7722-e4a8b1") {
+    if (-not [string]::IsNullOrWhiteSpace($currentToken) -and $currentToken -ne "sluga-7722-e4a8b1" -and $currentToken -ne "sluga-your-bot-token-here" -and $currentToken -ne "sluga-core-token") {
         $finalToken = $currentToken
     } else {
         $randHex = -join ((1..6) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
