@@ -184,69 +184,87 @@ echo ""
 # ------------------------------------------------------------------------------
 # ШАГ 5: Способ связи со SlugaGram (обход локальной сети)
 # ------------------------------------------------------------------------------
-echo "🔹 [ШАГ 5/6] Выбор способа связи с мобильным приложением SlugaGram..."
+echo "🔹 [ШАГ 5/6] Настройка канала связи со SlugaGram..."
 SERVER_IP=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "IP_СЕРВЕРА")
 
-echo "   Как ваш телефон будет связываться с агентом:"
-echo "   [1] Собственный домен и Reverse Proxy (HTTPS / WSS, порт 443)"
-echo "       -> Рекомендуется для хостинга (SpaceWeb и др.) или VPS со своим доменом."
-echo "       -> Автоматически компилирует и создает .htaccess и Nginx-конфиг."
-echo "   [2] Cloudflare Zero-Trust Tunnel (cloudflared)"
-echo "       -> Работает на любом ПК/сервере БЕЗ белого IP и без открытия портов."
-echo "       -> Автоматически скачивает cloudflared и создает скрипт туннеля."
-echo "   [3] Прямой IP / Локальная сеть (ws://${SERVER_IP}:8080/ws)"
-echo ""
-read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
+# Автопроверка наличия папок сайтов на хостинге
+FOUND_DIRS=($(find "$HOME" -maxdepth 3 -type d -name "public_html" 2>/dev/null || true))
+
+if [ ${#FOUND_DIRS[@]} -eq 0 ]; then
+    echo "   ℹ️ На хостинге не найдено сайтов/доменов (папка public_html отсутствует)."
+    echo "   🚀 [РЕКОМЕНДУЕТСЯ] Режим 1: Cloudflare Zero-Trust Tunnel"
+    echo "       -> Поднимает моментальный защищенный WSS-канал БЕЗ домена и без портов."
+    echo "   [2] Собственный домен (если привяжете позже)"
+    echo "   [3] Прямой IP (ws://${SERVER_IP}:8080/ws)"
+    read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
+    if [ -z "$NET_CHOICE" ] || [ "$NET_CHOICE" = "1" ]; then
+        USE_CF=true
+    elif [ "$NET_CHOICE" = "3" ]; then
+        USE_CF=false
+        USE_DIRECT_IP=true
+    else
+        USE_CF=false
+        USE_DOMAIN=true
+    fi
+else
+    echo "   ✅ Найдена папка веб-сайта: ${FOUND_DIRS[0]}"
+    echo "   [1] Использовать найденный веб-сайт и Reverse Proxy (.htaccess)"
+    echo "   [2] Cloudflare Zero-Trust Tunnel (автоматический защищенный туннель)"
+    echo "   [3] Прямой IP (ws://${SERVER_IP}:8080/ws)"
+    read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
+    if [ "$NET_CHOICE" = "2" ]; then
+        USE_CF=true
+    elif [ "$NET_CHOICE" = "3" ]; then
+        USE_CF=false
+        USE_DIRECT_IP=true
+    else
+        USE_CF=false
+        USE_DOMAIN=true
+    fi
+fi
 
 FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
 
-case "$NET_CHOICE" in
-    2)
-        echo ""
-        echo "   ⚡ Настройка Cloudflare Zero-Trust Tunnel..."
-        mkdir -p tools 2>/dev/null || true
-        ARCH=$(uname -m)
-        CF_URL=""
-        if [ "$ARCH" = "x86_64" ]; then
-            CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
-        elif [[ "$ARCH" =~ "arm" ]] || [ "$ARCH" = "aarch64" ]; then
-            CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
-        fi
+if [ "$USE_CF" = true ]; then
+    echo ""
+    echo "   ⚡ Подготовка Cloudflare Zero-Trust Tunnel..."
+    mkdir -p tools 2>/dev/null || true
+    ARCH=$(uname -m)
+    CF_URL=""
+    if [ "$ARCH" = "x86_64" ]; then
+        CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+    elif [[ "$ARCH" =~ "arm" ]] || [ "$ARCH" = "aarch64" ]; then
+        CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+    fi
 
-        if [ -n "$CF_URL" ] && [ ! -f "tools/cloudflared" ]; then
-            echo "   📥 Скачивание cloudflared..."
-            curl -L -s --max-time 30 "$CF_URL" -o tools/cloudflared 2>/dev/null || true
-            chmod +x tools/cloudflared 2>/dev/null || true
-        fi
+    if [ -n "$CF_URL" ] && [ ! -f "tools/cloudflared" ]; then
+        echo "   📥 Скачивание cloudflared в tools/cloudflared..."
+        curl -L -s --max-time 45 "$CF_URL" -o tools/cloudflared 2>/dev/null || true
+        chmod +x tools/cloudflared 2>/dev/null || true
+    fi
 
-        cat << 'EOF' > start_tunnel.sh
+    cat << 'EOF' > start_tunnel.sh
 #!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 if [ -f "./tools/cloudflared" ]; then
-    ./tools/cloudflared tunnel --url http://127.0.0.1:8080
+    exec ./tools/cloudflared tunnel --url http://127.0.0.1:8080
 else
-    cloudflared tunnel --url http://127.0.0.1:8080
+    exec cloudflared tunnel --url http://127.0.0.1:8080
 fi
 EOF
-        chmod +x start_tunnel.sh 2>/dev/null || true
-        echo "   ✅ Скрипт туннеля создан: ./start_tunnel.sh"
-        FINAL_CLIENT_URL="wss://<ВАШ-CLOUDFLARE-ДОМЕН>/ws"
-        ;;
+    chmod +x start_tunnel.sh 2>/dev/null || true
+    echo "   ✅ Скрипт туннеля готов."
 
-    3)
-        echo "   ✅ Выбран прямой IP: ws://${SERVER_IP}:8080/ws"
-        FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
-        ;;
+elif [ "$USE_DOMAIN" = true ]; then
+    echo ""
+    echo "   🌐 Настройка Reverse Proxy (.htaccess / Nginx)..."
+    read -p "   Введите имя вашего домена [ENTER для авто]: " USER_DOMAIN
+    if [ -z "$USER_DOMAIN" ]; then
+        USER_DOMAIN="ваш-домен.ru"
+    fi
 
-    *)
-        echo ""
-        echo "   🌐 Настройка Reverse Proxy (.htaccess / Nginx)..."
-        read -p "   Введите ваш домен (например, sugatov-it.ru) [ENTER для авто]: " USER_DOMAIN
-        if [ -z "$USER_DOMAIN" ]; then
-            USER_DOMAIN="ваш-домен.ru"
-        fi
-
-        # Генерация .htaccess для Apache / SpaceWeb
-        HTACCESS_CONTENT="<IfModule mod_rewrite.c>
+    HTACCESS_CONTENT="<IfModule mod_rewrite.c>
 RewriteEngine On
 
 # 1. Проксирование WebSocket соединения SlugaGram
@@ -258,103 +276,82 @@ RewriteCond %{HTTP:Upgrade} !=websocket [NC]
 RewriteRule ^api/(.*) http://127.0.0.1:8080/api/$1 [P,L]
 </IfModule>"
 
-        # Автоматический поиск и копирование в public_html на хостинге SpaceWeb
-        echo "$HTACCESS_CONTENT" > .htaccess
-        echo "   ✅ Файл .htaccess создан: $(pwd)/.htaccess"
+    echo "$HTACCESS_CONTENT" > .htaccess
+    echo "   ✅ Файл .htaccess создан: $(pwd)/.htaccess"
 
-        FOUND_DIRS=($(find "$HOME" -maxdepth 3 -type d -name "public_html" 2>/dev/null || true))
-        if [ ${#FOUND_DIRS[@]} -ge 1 ]; then
-            for pdir in "${FOUND_DIRS[@]}"; do
-                cp -f .htaccess "$pdir/.htaccess" 2>/dev/null || true
-                echo "   🚀 АВТОМАТИЧЕСКИ скопирован в корень сайта: $pdir/.htaccess"
-            done
-        else
-            echo "   ℹ️ Папка public_html не найдена автоматически (если у вас свой домен, файл сохранен в $(pwd)/.htaccess)."
-        fi
-
-        # Создаем также конфиг для Nginx (на случай VPS)
-        cat << EOF > nginx_sluga.conf
-# Конфигурация Nginx для проксирования SLUGA Agent
-location /ws {
-    proxy_pass http://127.0.0.1:8080/ws;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade \$http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host \$host;
-    proxy_read_timeout 86400s;
-}
-
-location /api/ {
-    proxy_pass http://127.0.0.1:8080/api/;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-}
-EOF
-        echo "   ✅ Nginx-шаблон сохранен в: nginx_sluga.conf"
+    if [ ${#FOUND_DIRS[@]} -ge 1 ]; then
+        for pdir in "${FOUND_DIRS[@]}"; do
+            cp -f .htaccess "$pdir/.htaccess" 2>/dev/null || true
+            echo "   🚀 АВТОМАТИЧЕСКИ скопирован в корень сайта: $pdir/.htaccess"
+        done
         FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
-        ;;
-esac
-echo ""
+    else
+        echo "   ℹ️ Файл .htaccess сохранен в $(pwd)/.htaccess"
+        FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
+    fi
+else
+    echo "   ✅ Выбран прямой IP: ws://${SERVER_IP}:8080/ws"
+    FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
+fi
 
 # ------------------------------------------------------------------------------
 # ШАГ 6: Запуск сервера и фонового режима
 # ------------------------------------------------------------------------------
+echo ""
 echo "🔹 [ШАГ 6/6] Запуск серверного агента..."
 
-# Проверка: есть ли systemd и sudo
-if [ "$HAS_SUDO" = true ] && command -v systemctl &> /dev/null; then
-    read -p "   Настроить автозапуск через службу systemd 24/7? [y/N]: " SETUP_SYS
-    if [[ "$SETUP_SYS" =~ ^[Yy]$ ]]; then
-        SERVICE_FILE="/etc/systemd/system/sluga.service"
-        CURRENT_USER=$(whoami)
-        sudo bash -c "cat <<EOF > $SERVICE_FILE
-[Unit]
-Description=SLUGA Autonomous AI Agent Service
-After=network.target
+# Запуск без sudo (nohup background daemon)
+read -p "   Запустить сервер в фоновом режиме прямо сейчас? [Y/n]: " RUN_BG
+if [[ ! "$RUN_BG" =~ ^[Nn]$ ]]; then
+    pkill -f "main.py start" 2>/dev/null || true
+    nohup $PYTHON_BIN main.py start > sluga_server.log 2>&1 &
+    SERVER_PID=$!
+    sleep 2
 
-[Service]
-Type=simple
-User=$CURRENT_USER
-WorkingDirectory=$SCRIPT_DIR
-ExecStart=$SCRIPT_DIR/.venv/bin/python $SCRIPT_DIR/main.py start
-Restart=always
-RestartSec=5
-EnvironmentFile=$SCRIPT_DIR/.env
-
-[Install]
-WantedBy=multi-user.target
-EOF"
-        sudo systemctl daemon-reload
-        sudo systemctl enable sluga.service
-        sudo systemctl restart sluga.service
-        echo "   ✅ Служба sluga.service запущена 24/7!"
+    if [ "$USE_CF" = true ] && [ -f "tools/cloudflared" ]; then
+        echo "   🚀 Запуск Cloudflare туннеля в фоне..."
+        pkill -f "cloudflared tunnel" 2>/dev/null || true
+        nohup ./tools/cloudflared tunnel --url http://127.0.0.1:8080 > tunnel.log 2>&1 &
+        echo "   ⏳ Ожидание выделения защищенного адреса WSS..."
+        for i in {1..10}; do
+            sleep 1
+            CF_DOMAIN=$(grep -oE 'https://[a-zA-Z0-9.-]+\.trycloudflare\.com' tunnel.log 2>/dev/null | head -n 1 || true)
+            if [ -n "$CF_DOMAIN" ]; then
+                FINAL_CLIENT_URL="${CF_DOMAIN/https:/wss:}/ws"
+                break
+            fi
+        done
     fi
-else
-    # Режим без sudo (nohup background daemon)
-    read -p "   Запустить сервер в фоновом режиме прямо сейчас? [Y/n]: " RUN_BG
-    if [[ ! "$RUN_BG" =~ ^[Nn]$ ]]; then
-        pkill -f "main.py start" 2>/dev/null || true
-        nohup $PYTHON_BIN main.py start > sluga_server.log 2>&1 &
-        SERVER_PID=$!
-        sleep 2
-        if ps -p $SERVER_PID > /dev/null 2>&1; then
-            echo "   ✅ Сервер успешно запущен в фоновом режиме (PID: $SERVER_PID)!"
-            echo "   Логи сервера пишутся в: sluga_server.log"
-        else
-            echo "   ℹ️ Для ручного запуска введите: python main.py start"
-        fi
+
+    if ps -p $SERVER_PID > /dev/null 2>&1; then
+        echo "   ✅ Сервер успешно запущен в фоновом режиме (PID: $SERVER_PID)!"
+        echo "   Логи сервера пишутся в: sluga_server.log"
+    else
+        echo "   ℹ️ Для ручного запуска введите: python main.py start"
     fi
 fi
+
+# Сохраняем файл с готовыми реквизитами для подключения
+cat << EOF > connection_info.txt
+=================================================================
+📱 ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ В ПРИЛОЖЕНИИ SLUGAGRAM:
+=================================================================
+• Адрес сервера (WebSocket) : ${FINAL_CLIENT_URL}
+• Токен связи с ботом       : ${FINAL_TOKEN}
+• Модель ИИ                 : ${SELECTED_MODEL}
+=================================================================
+EOF
 
 echo ""
 echo "================================================================="
 echo "   🎉 УСТАНОВКА И НАСТРОЙКА SLUGA УСПЕШНО ЗАВЕРШЕНЫ!"
 echo "================================================================="
-echo "📱 ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ В ПРИЛОЖЕНИИ SLUGAGRAM (на телефоне):"
+echo "📱 ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ В ПРИЛОЖЕНИИ SLUGAGRAM:"
 echo "   • Адрес сервера (WebSocket) : ${FINAL_CLIENT_URL}"
 echo "   • Токен связи с ботом       : ${FINAL_TOKEN}"
 echo "   • Выбранная модель          : ${SELECTED_MODEL}"
 echo ""
+echo "💾 Реквизиты также сохранены в файл: connection_info.txt"
 echo "⚡ Команды управления сервером:"
 echo "   • Просмотр логов:   tail -f sluga_server.log"
 echo "   • Проверка статуса: python main.py status"
