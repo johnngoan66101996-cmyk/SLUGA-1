@@ -248,6 +248,7 @@ EOF
     chmod +x start_tunnel.sh 2>/dev/null || true
     echo "   ✅ Скрипт туннеля готов."
 
+elif [ "$USE_DOMAIN" = true ]; then
     echo ""
     echo "   🌐 Настройка Reverse Proxy (.htaccess / Nginx)..."
     SAVED_DOMAIN=$(grep -E "^SLUGA_DOMAIN=" .env 2>/dev/null | cut -d '=' -f2- || true)
