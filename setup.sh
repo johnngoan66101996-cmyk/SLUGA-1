@@ -190,8 +190,15 @@ SERVER_IP=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/n
 # Автопроверка наличия доменов и папок сайтов на хостинге SpaceWeb / Linux
 FOUND_DIRS=($(find "$HOME" -maxdepth 3 -type d -name "public_html" 2>/dev/null || true))
 
+SAVED_DOMAIN=$(grep -E "^SLUGA_DOMAIN=" .env 2>/dev/null | cut -d '=' -f2- || true)
+if [ -n "$SAVED_DOMAIN" ]; then
+    DOMAIN_LABEL="[1] Собственный домен ($SAVED_DOMAIN) через Reverse Proxy (.htaccess)"
+else
+    DOMAIN_LABEL="[1] Собственный домен через Reverse Proxy (.htaccess / Nginx)"
+fi
+
 echo "   🌐 Выберите способ подключения SlugaGram к вашему серверу:"
-echo "   [1] Ваш собственный домен (sugatov-it.ru) через Reverse Proxy (.htaccess) [РЕКОМЕНДУЕТСЯ]"
+echo "   $DOMAIN_LABEL [РЕКОМЕНДУЕТСЯ]"
 echo "   [2] Cloudflare Zero-Trust Tunnel (автоматический туннель без домена)"
 echo "   [3] Прямой IP (ws://${SERVER_IP}:8080/ws)"
 read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
@@ -241,12 +248,25 @@ EOF
     chmod +x start_tunnel.sh 2>/dev/null || true
     echo "   ✅ Скрипт туннеля готов."
 
-elif [ "$USE_DOMAIN" = true ]; then
     echo ""
     echo "   🌐 Настройка Reverse Proxy (.htaccess / Nginx)..."
-    read -p "   Введите имя вашего домена [по умолчанию sugatov-it.ru]: " USER_DOMAIN
+    SAVED_DOMAIN=$(grep -E "^SLUGA_DOMAIN=" .env 2>/dev/null | cut -d '=' -f2- || true)
+    if [ -n "$SAVED_DOMAIN" ]; then
+        PROMPT_TEXT="   Введите имя вашего домена [по умолчанию: $SAVED_DOMAIN]: "
+    else
+        PROMPT_TEXT="   Введите имя вашего домена (например, mysite.ru): "
+    fi
+
+    read -p "$PROMPT_TEXT" USER_DOMAIN
     if [ -z "$USER_DOMAIN" ]; then
-        USER_DOMAIN="sugatov-it.ru"
+        USER_DOMAIN="${SAVED_DOMAIN:-ваш-домен.ru}"
+    fi
+
+    # Сохраняем домен в локальный .env пользователя
+    if grep -q "^SLUGA_DOMAIN=" .env 2>/dev/null; then
+        sed -i "s|^SLUGA_DOMAIN=.*|SLUGA_DOMAIN=$USER_DOMAIN|" .env
+    else
+        echo "SLUGA_DOMAIN=$USER_DOMAIN" >> .env
     fi
 
     HTACCESS_CONTENT="<IfModule mod_rewrite.c>
@@ -261,15 +281,17 @@ RewriteCond %{HTTP:Upgrade} !=websocket [NC]
 RewriteRule ^api/(.*) http://127.0.0.1:8080/api/$1 [P,L]
 </IfModule>"
 
-    # 1. Сохраняем в текущей папке проекта
+    # 1. Сохраняем в папке проекта
     echo "$HTACCESS_CONTENT" > .htaccess
     echo "   ✅ Файл .htaccess создан в папке проекта: $(pwd)/.htaccess"
 
-    # 2. Сохраняем в корень аккаунта SpaceWeb (~/.htaccess)
-    echo "$HTACCESS_CONTENT" > "$HOME/.htaccess"
-    echo "   🚀 АВТОМАТИЧЕСКИ скопирован в корень веб-сервера SpaceWeb: $HOME/.htaccess"
+    # 2. Если на хостинге (SpaceWeb и др.) корень сайта совпадает с домашней папкой
+    if [ -w "$HOME" ]; then
+        echo "$HTACCESS_CONTENT" > "$HOME/.htaccess"
+        echo "   🚀 Скопирован в корень веб-сервера хостинга: $HOME/.htaccess"
+    fi
 
-    # 3. Если есть папки public_html или сайты в подпапках — копируем и туда
+    # 3. Если есть классические папки сайтов (public_html / www) — копируем и туда
     if [ ${#FOUND_DIRS[@]} -ge 1 ]; then
         for pdir in "${FOUND_DIRS[@]}"; do
             cp -f .htaccess "$pdir/.htaccess" 2>/dev/null || true
