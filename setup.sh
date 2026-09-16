@@ -258,22 +258,18 @@ RewriteCond %{HTTP:Upgrade} !=websocket [NC]
 RewriteRule ^api/(.*) http://127.0.0.1:8080/api/$1 [P,L]
 </IfModule>"
 
-        # Ищем папку public_html на хостинге
-        TARGET_WEB_DIR=""
-        for candidate in "$SCRIPT_DIR/public_html" "$SCRIPT_DIR/../public_html" "$SCRIPT_DIR/../../public_html" "$HOME/public_html" "$HOME/$USER_DOMAIN/public_html"; do
-            if [ -d "$candidate" ]; then
-                TARGET_WEB_DIR="$candidate"
-                break
-            fi
-        done
+        # Автоматический поиск и копирование в public_html на хостинге SpaceWeb
+        echo "$HTACCESS_CONTENT" > .htaccess
+        echo "   ✅ Файл .htaccess создан: $(pwd)/.htaccess"
 
-        if [ -n "$TARGET_WEB_DIR" ]; then
-            echo "$HTACCESS_CONTENT" > "$TARGET_WEB_DIR/.htaccess"
-            echo "   ✅ Файл .htaccess автоматически скомпилирован в: $TARGET_WEB_DIR/.htaccess"
+        FOUND_DIRS=($(find "$HOME" -maxdepth 3 -type d -name "public_html" 2>/dev/null || true))
+        if [ ${#FOUND_DIRS[@]} -ge 1 ]; then
+            for pdir in "${FOUND_DIRS[@]}"; do
+                cp -f .htaccess "$pdir/.htaccess" 2>/dev/null || true
+                echo "   🚀 АВТОМАТИЧЕСКИ скопирован в корень сайта: $pdir/.htaccess"
+            done
         else
-            echo "$HTACCESS_CONTENT" > .htaccess
-            echo "   ✅ Файл .htaccess скомпилирован в текущей папке: $(pwd)/.htaccess"
-            echo "   (Скопируйте его в корень вашего сайта public_html)"
+            echo "   ℹ️ Папка public_html не найдена автоматически (если у вас свой домен, файл сохранен в $(pwd)/.htaccess)."
         fi
 
         # Создаем также конфиг для Nginx (на случай VPS)
