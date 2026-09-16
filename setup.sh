@@ -187,40 +187,25 @@ echo ""
 echo "🔹 [ШАГ 5/6] Настройка канала связи со SlugaGram..."
 SERVER_IP=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "IP_СЕРВЕРА")
 
-# Автопроверка наличия папок сайтов на хостинге
+# Автопроверка наличия доменов и папок сайтов на хостинге SpaceWeb / Linux
 FOUND_DIRS=($(find "$HOME" -maxdepth 3 -type d -name "public_html" 2>/dev/null || true))
 
-if [ ${#FOUND_DIRS[@]} -eq 0 ]; then
-    echo "   ℹ️ На хостинге не найдено сайтов/доменов (папка public_html отсутствует)."
-    echo "   🚀 [РЕКОМЕНДУЕТСЯ] Режим 1: Cloudflare Zero-Trust Tunnel"
-    echo "       -> Поднимает моментальный защищенный WSS-канал БЕЗ домена и без портов."
-    echo "   [2] Собственный домен (если привяжете позже)"
-    echo "   [3] Прямой IP (ws://${SERVER_IP}:8080/ws)"
-    read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
-    if [ -z "$NET_CHOICE" ] || [ "$NET_CHOICE" = "1" ]; then
-        USE_CF=true
-    elif [ "$NET_CHOICE" = "3" ]; then
-        USE_CF=false
-        USE_DIRECT_IP=true
-    else
-        USE_CF=false
-        USE_DOMAIN=true
-    fi
+echo "   🌐 Выберите способ подключения SlugaGram к вашему серверу:"
+echo "   [1] Ваш собственный домен (sugatov-it.ru) через Reverse Proxy (.htaccess) [РЕКОМЕНДУЕТСЯ]"
+echo "   [2] Cloudflare Zero-Trust Tunnel (автоматический туннель без домена)"
+echo "   [3] Прямой IP (ws://${SERVER_IP}:8080/ws)"
+read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
+
+if [ -z "$NET_CHOICE" ] || [ "$NET_CHOICE" = "1" ]; then
+    USE_DOMAIN=true
+    USE_CF=false
+elif [ "$NET_CHOICE" = "2" ]; then
+    USE_CF=true
+    USE_DOMAIN=false
 else
-    echo "   ✅ Найдена папка веб-сайта: ${FOUND_DIRS[0]}"
-    echo "   [1] Использовать найденный веб-сайт и Reverse Proxy (.htaccess)"
-    echo "   [2] Cloudflare Zero-Trust Tunnel (автоматический защищенный туннель)"
-    echo "   [3] Прямой IP (ws://${SERVER_IP}:8080/ws)"
-    read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
-    if [ "$NET_CHOICE" = "2" ]; then
-        USE_CF=true
-    elif [ "$NET_CHOICE" = "3" ]; then
-        USE_CF=false
-        USE_DIRECT_IP=true
-    else
-        USE_CF=false
-        USE_DOMAIN=true
-    fi
+    USE_CF=false
+    USE_DOMAIN=false
+    USE_DIRECT_IP=true
 fi
 
 FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
@@ -259,9 +244,9 @@ EOF
 elif [ "$USE_DOMAIN" = true ]; then
     echo ""
     echo "   🌐 Настройка Reverse Proxy (.htaccess / Nginx)..."
-    read -p "   Введите имя вашего домена [ENTER для авто]: " USER_DOMAIN
+    read -p "   Введите имя вашего домена [по умолчанию sugatov-it.ru]: " USER_DOMAIN
     if [ -z "$USER_DOMAIN" ]; then
-        USER_DOMAIN="ваш-домен.ru"
+        USER_DOMAIN="sugatov-it.ru"
     fi
 
     HTACCESS_CONTENT="<IfModule mod_rewrite.c>
@@ -276,19 +261,23 @@ RewriteCond %{HTTP:Upgrade} !=websocket [NC]
 RewriteRule ^api/(.*) http://127.0.0.1:8080/api/$1 [P,L]
 </IfModule>"
 
+    # 1. Сохраняем в текущей папке проекта
     echo "$HTACCESS_CONTENT" > .htaccess
-    echo "   ✅ Файл .htaccess создан: $(pwd)/.htaccess"
+    echo "   ✅ Файл .htaccess создан в папке проекта: $(pwd)/.htaccess"
 
+    # 2. Сохраняем в корень аккаунта SpaceWeb (~/.htaccess)
+    echo "$HTACCESS_CONTENT" > "$HOME/.htaccess"
+    echo "   🚀 АВТОМАТИЧЕСКИ скопирован в корень веб-сервера SpaceWeb: $HOME/.htaccess"
+
+    # 3. Если есть папки public_html или сайты в подпапках — копируем и туда
     if [ ${#FOUND_DIRS[@]} -ge 1 ]; then
         for pdir in "${FOUND_DIRS[@]}"; do
             cp -f .htaccess "$pdir/.htaccess" 2>/dev/null || true
-            echo "   🚀 АВТОМАТИЧЕСКИ скопирован в корень сайта: $pdir/.htaccess"
+            echo "   🚀 Скопирован в: $pdir/.htaccess"
         done
-        FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
-    else
-        echo "   ℹ️ Файл .htaccess сохранен в $(pwd)/.htaccess"
-        FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
     fi
+
+    FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
 else
     echo "   ✅ Выбран прямой IP: ws://${SERVER_IP}:8080/ws"
     FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
