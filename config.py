@@ -15,82 +15,130 @@ BASE_DIR = Path(__file__).resolve().parent
 # Таблица расхода токенов и специализаций
 # ==============================================================================
 LITEAI_MODELS_CATALOG: Dict[str, Dict[str, Any]] = {
-    # --- Линейка Anthropic Claude (Рекомендуется для кода и архитектуры) ---
-    "claude-sonnet-4.6": {
+    # --- Anthropic Claude ---
+    "claude-sonnet-4-6": {
         "name": "Claude Sonnet 4.6 (По умолчанию)",
         "provider": "Anthropic / LiteAI",
-        "consumption": "Сбалансированный (~3.0$ / 1M токенов)",
+        "consumption": "Баланс скорости и качества",
         "tier": "balanced",
-        "description": "Идеально для глубокого анализа кода, рефакторинга, архитектуры и баг-фикса.",
+        "description": "Баланс скорости и качества, идеален для кода и архитектуры.",
         "context_window": 200000
     },
-    "claude-opus-4.8": {
-        "name": "Claude Opus 4.8",
+    "claude-sonnet-5": {
+        "name": "Claude Sonnet 5",
         "provider": "Anthropic / LiteAI",
-        "consumption": "Высокий (~15.0$ / 1M токенов)",
-        "tier": "heavy",
-        "description": "Максимальная логическая глубина, сложнейшие алгоритмы и математика.",
+        "consumption": "Следующее поколение",
+        "tier": "balanced",
+        "description": "Следующее поколение: баланс скорости и качества.",
         "context_window": 200000
     },
-    "claude-haiku-4.5": {
+    "claude-opus-5": {
+        "name": "Claude Opus 5",
+        "provider": "Anthropic / LiteAI",
+        "consumption": "Высокий",
+        "tier": "heavy",
+        "description": "Флагман нового поколения для самых сложных задач.",
+        "context_window": 200000
+    },
+    "claude-opus-4-8": {
+        "name": "Claude Opus 4.8 (200K)",
+        "provider": "Anthropic / LiteAI",
+        "consumption": "Высокий",
+        "tier": "heavy",
+        "description": "Самая мощная, сложные задачи.",
+        "context_window": 200000
+    },
+    "claude-opus-4-8[1m]": {
+        "name": "Claude Opus 4.8 (1.0M контекст)",
+        "provider": "Anthropic / LiteAI",
+        "consumption": "Максимальный",
+        "tier": "heavy",
+        "description": "Самая мощная, огромный контекст 1.0M токенов.",
+        "context_window": 1000000
+    },
+    "claude-haiku-4-5": {
         "name": "Claude Haiku 4.5",
         "provider": "Anthropic / LiteAI",
-        "consumption": "Низкий (~0.8$ / 1M токенов)",
+        "consumption": "Низкий",
         "tier": "economy",
-        "description": "Сверхбыстрая экономная модель для типовых задач и быстрых ответов.",
+        "description": "Быстрые инференс-задачи.",
         "context_window": 200000
     },
 
-    # --- Линейка OpenAI GPT-5.x / GPT-4o ---
-    "gpt-5.6-sol": {
-        "name": "GPT-5.6 Sol",
-        "provider": "OpenAI / LiteAI",
-        "consumption": "Средний (~2.5$ / 1M токенов)",
-        "tier": "balanced",
-        "description": "Высокая скорость, точность и универсальность.",
-        "context_window": 128000
-    },
+    # --- OpenAI GPT-5.x ---
     "gpt-5.6-luna": {
         "name": "GPT-5.6 Luna",
         "provider": "OpenAI / LiteAI",
-        "consumption": "Повышенный (~5.0$ / 1M токенов)",
+        "consumption": "Длинный контекст (1.1M)",
         "tier": "heavy",
-        "description": "Флагманский общий интеллект с глубоким пониманием нюансов.",
-        "context_window": 128000
+        "description": "Длинный контекст и творческие задачи.",
+        "context_window": 1100000
     },
-    "openai/gpt-4o": {
-        "name": "GPT-4o",
+    "gpt-5.6-sol": {
+        "name": "GPT-5.6 Sol",
         "provider": "OpenAI / LiteAI",
-        "consumption": "Средний (~2.5$ / 1M токенов)",
+        "consumption": "Строгий формат (1.1M)",
         "tier": "balanced",
-        "description": "Мультимодальный флагман для комплексных задач.",
-        "context_window": 128000
+        "description": "Строгий формат и точные инструкции.",
+        "context_window": 1100000
+    },
+    "gpt-5.6-terra": {
+        "name": "GPT-5.6 Terra",
+        "provider": "OpenAI / LiteAI",
+        "consumption": "Рассуждения (1.1M)",
+        "tier": "heavy",
+        "description": "Многошаговые рассуждения и пайплайны.",
+        "context_window": 1100000
     },
 
-    # --- Открытые и ультра-экономные модели (Минимальный расход токенов) ---
-    "deepseek/deepseek-chat": {
-        "name": "DeepSeek V3 / V4 Flash (Минимальный расход)",
+    # --- Другие открытые модели ---
+    "deepseek/deepseek-v4-flash-0731": {
+        "name": "DeepSeek V4 Flash 0731",
         "provider": "DeepSeek / LiteAI",
-        "consumption": "Минимальный (~0.14$ / 1M токенов — в 20 раз дешевле Sonnet!)",
+        "consumption": "Ультра-эконом (1.3M)",
         "tier": "ultra_economy",
-        "description": "Рекордная экономия баланса при отличном качестве логики и русского языка.",
-        "context_window": 64000
+        "description": "Быстрая открытая модель для ежедневных задач с контекстом 1.3M.",
+        "context_window": 1300000
     },
-    "qwen/qwen-2.5-coder-32b-instruct": {
-        "name": "Qwen 2.5 Coder 32B",
+    "qwen/qwen3.7-flash": {
+        "name": "Qwen 3.7 Flash",
         "provider": "Alibaba / LiteAI",
-        "consumption": "Очень низкий (~0.20$ / 1M токенов)",
+        "consumption": "Эконом (1.0M)",
         "tier": "ultra_economy",
-        "description": "Специализированная нейросеть для написания и аудита чистого кода.",
-        "context_window": 128000
+        "description": "Alibaba Qwen 3.7, сильная мультиязычная открытая модель.",
+        "context_window": 1000000
     },
-    "glm-5.3-flash": {
-        "name": "GLM-5.3 Flash",
+    "z-ai/glm-5.3-flash": {
+        "name": "GLM 5.3 Flash",
         "provider": "Zhipu / LiteAI",
-        "consumption": "Ультра-низкий (~0.10$ / 1M токенов)",
+        "consumption": "Ультра-эконом (1.3M)",
         "tier": "ultra_economy",
-        "description": "Легковесная и мгновенная модель для коротких запросов.",
-        "context_window": 32000
+        "description": "Zhipu GLM-5.3 Flash, быстрая открытая модель.",
+        "context_window": 1300000
+    },
+    "nvidia/nemotron-3.5-lightning": {
+        "name": "Nemotron 3.5 Lightning",
+        "provider": "NVIDIA / LiteAI",
+        "consumption": "Эконом (262K)",
+        "tier": "economy",
+        "description": "NVIDIA Nemotron, быстрая открытая модель.",
+        "context_window": 262000
+    },
+    "xiaomi/mimo-v2.5": {
+        "name": "MiMo v2.5",
+        "provider": "Xiaomi / LiteAI",
+        "consumption": "Эконом (1.1M)",
+        "tier": "economy",
+        "description": "Xiaomi MiMo v2.5, эффективная открытая модель.",
+        "context_window": 1100000
+    },
+    "ibm-granite/granite-4.2-8b": {
+        "name": "Granite 4.2 8B",
+        "provider": "IBM / LiteAI",
+        "consumption": "Ультра-эконом (131K)",
+        "tier": "ultra_economy",
+        "description": "IBM Granite 4.2, свежий открытый релиз.",
+        "context_window": 131000
     }
 }
 

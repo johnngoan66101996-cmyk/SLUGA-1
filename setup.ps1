@@ -149,19 +149,49 @@ if (-not [string]::IsNullOrWhiteSpace($currentApiKey) -and $currentApiKey -ne "s
 }
 
 Write-Host ""
-Write-Host "   Выберите модель нейросети (баланс зависит от выбора модели):" -ForegroundColor Gray
-Write-Host "   1) claude-sonnet-4.6  (Рекомендуется: код, рефакторинг, архитектура)" -ForegroundColor Cyan
-Write-Host "   2) deepseek/deepseek-chat (Ультра-эконом: быстрая работа, минимальный расход)" -ForegroundColor Cyan
-Write-Host "   3) openai/gpt-4o      (Мультимодал: таблицы, документы, код)" -ForegroundColor Cyan
-Write-Host "   4) claude-opus-4.8    (Тяжелая логика и огромные задачи)" -ForegroundColor Cyan
-$modelChoice = Read-Host "   Выберите вариант [1-4, по умолчанию 1]"
+Write-Host "   💡 Каталог LiteAI (все модели доступны по единому ключу sk-bf-...):" -ForegroundColor Gray
+Write-Host "   --- Anthropic Claude ---" -ForegroundColor Yellow
+Write-Host "   1)  claude-sonnet-4-6                (Баланс скорости и качества, для кода и архитектуры) [ПО УМОЛЧАНИЮ]" -ForegroundColor Cyan
+Write-Host "   2)  claude-sonnet-5                  (Следующее поколение: баланс скорости и качества)" -ForegroundColor Cyan
+Write-Host "   3)  claude-opus-5                    (Флагман нового поколения для самых сложных задач)" -ForegroundColor Cyan
+Write-Host "   4)  claude-opus-4-8                  (Самая мощная, сложные задачи - 200K)" -ForegroundColor Cyan
+Write-Host "   5)  claude-opus-4-8[1m]              (Самая мощная, огромный контекст 1.0M)" -ForegroundColor Cyan
+Write-Host "   6)  claude-haiku-4-5                 (Быстрые инференс-задачи)" -ForegroundColor Cyan
+Write-Host "   --- OpenAI GPT-5.x ---" -ForegroundColor Yellow
+Write-Host "   7)  gpt-5.6-luna                     (Длинный контекст 1.1M и творческие задачи)" -ForegroundColor Cyan
+Write-Host "   8)  gpt-5.6-sol                      (Строгий формат 1.1M и точные инструкции)" -ForegroundColor Cyan
+Write-Host "   9)  gpt-5.6-terra                    (Многошаговые рассуждения и пайплайны 1.1M)" -ForegroundColor Cyan
+Write-Host "   --- Открытые модели (Максимальная экономия баланса) ---" -ForegroundColor Yellow
+Write-Host "   10) deepseek/deepseek-v4-flash-0731  (Ультра-эконом: открытая модель, контекст 1.3M)" -ForegroundColor Cyan
+Write-Host "   11) qwen/qwen3.7-flash               (Alibaba Qwen 3.7, мультиязычная, 1.0M)" -ForegroundColor Cyan
+Write-Host "   12) z-ai/glm-5.3-flash               (Zhipu GLM-5.3 Flash, быстрая, 1.3M)" -ForegroundColor Cyan
+Write-Host "   13) nvidia/nemotron-3.5-lightning    (NVIDIA Nemotron, быстрая, 262K)" -ForegroundColor Cyan
+Write-Host "   14) xiaomi/mimo-v2.5                 (Xiaomi MiMo v2.5, эффективная, 1.1M)" -ForegroundColor Cyan
+Write-Host "   15) ibm-granite/granite-4.2-8b       (IBM Granite 4.2, свежий релиз, 131K)" -ForegroundColor Cyan
+Write-Host "   0)  Ввести другое название модели вручную" -ForegroundColor White
+$modelChoice = Read-Host "   Выберите вариант [1-15, по умолчанию 1]"
 
-$chosenModel = "claude-sonnet-4.6"
+$chosenModel = "claude-sonnet-4-6"
 switch ($modelChoice) {
-    "2" { $chosenModel = "deepseek/deepseek-chat" }
-    "3" { $chosenModel = "openai/gpt-4o" }
-    "4" { $chosenModel = "claude-opus-4.8" }
-    Default { $chosenModel = "claude-sonnet-4.6" }
+    "2" { $chosenModel = "claude-sonnet-5" }
+    "3" { $chosenModel = "claude-opus-5" }
+    "4" { $chosenModel = "claude-opus-4-8" }
+    "5" { $chosenModel = "claude-opus-4-8[1m]" }
+    "6" { $chosenModel = "claude-haiku-4-5" }
+    "7" { $chosenModel = "gpt-5.6-luna" }
+    "8" { $chosenModel = "gpt-5.6-sol" }
+    "9" { $chosenModel = "gpt-5.6-terra" }
+    "10" { $chosenModel = "deepseek/deepseek-v4-flash-0731" }
+    "11" { $chosenModel = "qwen/qwen3.7-flash" }
+    "12" { $chosenModel = "z-ai/glm-5.3-flash" }
+    "13" { $chosenModel = "nvidia/nemotron-3.5-lightning" }
+    "14" { $chosenModel = "xiaomi/mimo-v2.5" }
+    "15" { $chosenModel = "ibm-granite/granite-4.2-8b" }
+    "0" {
+        $customM = Read-Host "   Введите точное название модели"
+        if (-not [string]::IsNullOrWhiteSpace($customM)) { $chosenModel = $customM.Trim() }
+    }
+    Default { $chosenModel = "claude-sonnet-4-6" }
 }
 
 $envContent = Get-Content ".env" -Raw -Encoding UTF8

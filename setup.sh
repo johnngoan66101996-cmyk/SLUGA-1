@@ -133,19 +133,48 @@ else
 fi
 
 echo ""
-echo "   💡 Баланс зависит от выбора модели"
-echo "   Выберите активную ИИ-модель:"
-echo "   [1] claude-sonnet-4.6        (Рекомендуется: код, архитектура, системное исправление)"
-echo "   [2] deepseek/deepseek-chat   (Ультра-эконом: максимальная экономия баланса)"
-echo "   [3] openai/gpt-4o            (Универсальная мультимодальная модель)"
-echo "   [4] claude-opus-4.8          (Максимальная логическая мощность и сложные задачи)"
-read -p "   Ваш выбор [по умолчанию 1]: " MODEL_CHOICE
+echo "   💡 Каталог LiteAI (все модели доступны по единому ключу sk-bf-...):"
+echo "   --- Anthropic Claude ---"
+echo "   [1]  claude-sonnet-4-6                (Баланс скорости и качества, для кода и архитектуры) [ПО УМОЛЧАНИЮ]"
+echo "   [2]  claude-sonnet-5                  (Следующее поколение: баланс скорости и качества)"
+echo "   [3]  claude-opus-5                    (Флагман нового поколения для самых сложных задач)"
+echo "   [4]  claude-opus-4-8                  (Самая мощная, сложные задачи - 200K)"
+echo "   [5]  claude-opus-4-8[1m]              (Самая мощная, огромный контекст 1.0M)"
+echo "   [6]  claude-haiku-4-5                 (Быстрые инференс-задачи)"
+echo "   --- OpenAI GPT-5.x ---"
+echo "   [7]  gpt-5.6-luna                     (Длинный контекст 1.1M и творческие задачи)"
+echo "   [8]  gpt-5.6-sol                      (Строгий формат 1.1M и точные инструкции)"
+echo "   [9]  gpt-5.6-terra                    (Многошаговые рассуждения и пайплайны 1.1M)"
+echo "   --- Открытые модели (Максимальная экономия баланса) ---"
+echo "   [10] deepseek/deepseek-v4-flash-0731  (Ультра-эконом: открытая модель, контекст 1.3M)"
+echo "   [11] qwen/qwen3.7-flash               (Alibaba Qwen 3.7, мультиязычная, 1.0M)"
+echo "   [12] z-ai/glm-5.3-flash               (Zhipu GLM-5.3 Flash, быстрая, 1.3M)"
+echo "   [13] nvidia/nemotron-3.5-lightning    (NVIDIA Nemotron, быстрая, 262K)"
+echo "   [14] xiaomi/mimo-v2.5                 (Xiaomi MiMo v2.5, эффективная, 1.1M)"
+echo "   [15] ibm-granite/granite-4.2-8b       (IBM Granite 4.2, свежий релиз, 131K)"
+echo "   [0]  Ввести другое название модели вручную"
+read -p "   Ваш выбор [1-15, по умолчанию 1]: " MODEL_CHOICE
 
 case "$MODEL_CHOICE" in
-    2) SELECTED_MODEL="deepseek/deepseek-chat" ;;
-    3) SELECTED_MODEL="openai/gpt-4o" ;;
-    4) SELECTED_MODEL="claude-opus-4.8" ;;
-    *) SELECTED_MODEL="claude-sonnet-4.6" ;;
+    2) SELECTED_MODEL="claude-sonnet-5" ;;
+    3) SELECTED_MODEL="claude-opus-5" ;;
+    4) SELECTED_MODEL="claude-opus-4-8" ;;
+    5) SELECTED_MODEL="claude-opus-4-8[1m]" ;;
+    6) SELECTED_MODEL="claude-haiku-4-5" ;;
+    7) SELECTED_MODEL="gpt-5.6-luna" ;;
+    8) SELECTED_MODEL="gpt-5.6-sol" ;;
+    9) SELECTED_MODEL="gpt-5.6-terra" ;;
+    10) SELECTED_MODEL="deepseek/deepseek-v4-flash-0731" ;;
+    11) SELECTED_MODEL="qwen/qwen3.7-flash" ;;
+    12) SELECTED_MODEL="z-ai/glm-5.3-flash" ;;
+    13) SELECTED_MODEL="nvidia/nemotron-3.5-lightning" ;;
+    14) SELECTED_MODEL="xiaomi/mimo-v2.5" ;;
+    15) SELECTED_MODEL="ibm-granite/granite-4.2-8b" ;;
+    0) 
+       read -p "   Введите точное название модели: " CUSTOM_M
+       SELECTED_MODEL="${CUSTOM_M:-claude-sonnet-4-6}"
+       ;;
+    *) SELECTED_MODEL="claude-sonnet-4-6" ;;
 esac
 
 sed -i "s|^LITEAI_MODEL=.*|LITEAI_MODEL=$SELECTED_MODEL|" .env
