@@ -26,6 +26,13 @@ except Exception:
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
+# Автоматический перезапуск внутри .venv (если запущен системным Python)
+_venv_unix = BASE_DIR / ".venv" / "bin" / "python"
+_venv_win = BASE_DIR / ".venv" / "Scripts" / "python.exe"
+_venv_py = _venv_win if _venv_win.exists() else (_venv_unix if _venv_unix.exists() else None)
+if _venv_py and Path(sys.executable).resolve() != _venv_py.resolve():
+    import os
+    os.execv(str(_venv_py), [str(_venv_py)] + sys.argv)
 
 from config import settings, LITEAI_MODELS_CATALOG
 from core.auth import rotate_token, get_or_create_bot_token
