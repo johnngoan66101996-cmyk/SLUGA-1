@@ -41,6 +41,7 @@ from core.auth import rotate_token, get_or_create_bot_token
 def cmd_status():
     """Выводит сводный статус агента."""
     meta = LITEAI_MODELS_CATALOG.get(settings.liteai_model, {})
+    domain_status = settings.sluga_domain if settings.sluga_domain else "⚠️ НЕ НАСТРОЕН! добавьте SLUGA_DOMAIN=sugatov-it.ru в .env"
     print("=" * 60)
     print("🤖 СЕРВЕРНЫЙ АГЕНТ SLUGA — ТЕКУЩИЙ СТАТУС")
     print("=" * 60)
@@ -49,7 +50,8 @@ def cmd_status():
     print(f"• Расход токенов    : {meta.get('consumption', 'Сбалансированный')}")
     print(f"• Шлюз LiteAI       : {settings.liteai_base_url}")
     print(f"• LiteAI API Key    : {'[Настроен]' if settings.liteai_api_key else '[НЕ НАСТРОЕН ⚠️]'}")
-    print(f"• Хост / Порт       : {settings.server_host}:{settings.server_port}")
+    print(f"• Домен сайта       : {domain_status}")
+    print(f"• Публичный WS URL    : {settings.public_ws_url}")
     print(f"• База данных SQLite: {settings.sqlite_db_path}")
     print(f"• Голос Edge-TTS    : {settings.tts_voice}")
     print("=" * 60)
@@ -69,15 +71,16 @@ def cmd_reset_token():
 def cmd_info():
     """Выводит реквизиты для подключения клиента к агенту."""
     print("=" * 60)
-    print("📱 ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ КЛИЕНТА К АГЕНТУ SLUGA")
+    print("📱 ДАННЫЕ ДЛЯ ПОДКЛЮЧЕНИЯ В ПРИЛОЖЕНИИ SLUGAGRAM")
     print("=" * 60)
-    print("1. В настройках клиента (псевдо-Телеграм или приложение) укажите:")
-    print(f"   • Адрес сервера (WebSocket) : ws://{settings.server_host}:{settings.server_port}/ws")
+    print("В настройках SlugaGram укажите:")
+    print(f"   • Адрес сервера (WebSocket) : {settings.public_ws_url}")
     print(f"   • Токен связи с ботом       : {settings.sluga_bot_token}")
-    print(f"   • HTTP API эндпоинт         : http://{settings.server_host}:{settings.server_port}")
-    print("\n2. Для подключения с внешнего IP замените 0.0.0.0 или 127.0.0.1 на IP вашего VPS.")
-    print(f"   Пример для внешнего VPS:")
-    print(f"   ws://<YOUR_VPS_IP>:{settings.server_port}/ws?token={settings.sluga_bot_token}")
+    print(f"   • HTTP API эндпоинт         : {settings.public_http_url}")
+    if not settings.sluga_domain:
+        print("")
+        print("⚠️  SLUGA_DOMAIN не задан! Добавьте в .env:")
+        print("    SLUGA_DOMAIN=sugatov-it.ru")
     print("=" * 60)
 
 

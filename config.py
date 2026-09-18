@@ -211,8 +211,13 @@ try:
         liteai_base_url: str = Field(default="https://api.liteai.tech/v1", alias="LITEAI_BASE_URL")
         liteai_model: str = Field(default="claude-sonnet-4-6", alias="LITEAI_MODEL")
 
-        # 3. Сетевые параметры сервера
-        server_host: str = Field(default="0.0.0.0", alias="SERVER_HOST")
+        # 3. Публичный домен (ОБЯЗАТЕЛЬНО заполнить в .env)
+        # Пример: SLUGA_DOMAIN=sugatov-it.ru
+        # Сервер изнутри слушает 127.0.0.1:8080, снаружи работает ТОЛЬКО через домен.
+        sluga_domain: Optional[str] = Field(default=None, alias="SLUGA_DOMAIN")
+
+        # 3a. Внутренний сетевой сокет (только для uvicorn, НЕ для клиента)
+        server_host: str = Field(default="127.0.0.1", alias="SERVER_HOST")
         server_port: int = Field(default=8080, alias="SERVER_PORT")
 
         # 4. База данных и память SQLite WAL
@@ -221,6 +226,20 @@ try:
         log_level: str = Field(default="INFO", alias="LOG_LEVEL")
         max_react_steps: int = Field(default=12, alias="MAX_REACT_STEPS")
 
+        @property
+        def public_ws_url(self) -> str:
+            """Публичный WebSocket URL — всегда через домен."""
+            if self.sluga_domain:
+                return f"wss://{self.sluga_domain}/ws"
+            return f"ws://127.0.0.1:{self.server_port}/ws"
+
+        @property
+        def public_http_url(self) -> str:
+            """Публичный HTTP URL — всегда через домен."""
+            if self.sluga_domain:
+                return f"https://{self.sluga_domain}"
+            return f"http://127.0.0.1:{self.server_port}"
+
 except ImportError:
     class Settings(ConfigMethodsMixin):
         def __init__(self):
@@ -228,12 +247,25 @@ except ImportError:
             self.liteai_api_key = os.getenv("LITEAI_API_KEY", None)
             self.liteai_base_url = os.getenv("LITEAI_BASE_URL", "https://api.liteai.tech/v1")
             self.liteai_model = os.getenv("LITEAI_MODEL", "claude-sonnet-4-6").replace(".", "-")
-            self.server_host = os.getenv("SERVER_HOST", "0.0.0.0")
+            self.sluga_domain = os.getenv("SLUGA_DOMAIN", None)
+            self.server_host = os.getenv("SERVER_HOST", "127.0.0.1")
             self.server_port = int(os.getenv("SERVER_PORT", "8080"))
             self.sqlite_db_path = os.getenv("SQLITE_DB_PATH", "./data/sluga_memory.db")
             self.tts_voice = os.getenv("TTS_VOICE", "ru-RU-DmitryNeural")
             self.log_level = os.getenv("LOG_LEVEL", "INFO")
             self.max_react_steps = int(os.getenv("MAX_REACT_STEPS", "12"))
+
+        @property
+        def public_ws_url(self) -> str:
+            if self.sluga_domain:
+                return f"wss://{self.sluga_domain}/ws"
+            return f"ws://127.0.0.1:{self.server_port}/ws"
+
+        @property
+        def public_http_url(self) -> str:
+            if self.sluga_domain:
+                return f"https://{self.sluga_domain}"
+            return f"http://127.0.0.1:{self.server_port}"
 
 
 settings = Settings()
