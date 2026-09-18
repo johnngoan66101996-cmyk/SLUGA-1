@@ -273,55 +273,81 @@ elif [ "$USE_DOMAIN" = true ]; then
     if [ -z "$USER_DOMAIN" ]; then
         USER_DOMAIN="${SAVED_DOMAIN:-ваш-домен.ru}"
     fi
-    # Очищаем домен от префиксов http://, https://, wss://, ws://, путей и пробелов
-    USER_DOMAIN=$(echo "$USER_DOMAIN" | sed -E 's|^https?://||; s|^wss?://||; s|/.*$||' | tr -d ' ')
 
-    # Сохраняем домен в локальный .env пользователя
+    # Зачищаем домен от любых префиксов через Python (надёжнее sed на любом хостинге)
+    USER_DOMAIN=$(python3 -c "
+import re, sys
+d = sys.argv[1].strip()
+d = re.sub(r'^(https?|wss?)://', '', d)
+d = re.sub(r'/.*$', '', d)
+print(d)
+" "$USER_DOMAIN" 2>/dev/null || echo "$USER_DOMAIN" | sed 's|https://||g; s|http://||g; s|wss://||g; s|ws://||g; s|/.*||')
+
+    echo "   ✅ Домен принят: $USER_DOMAIN"
+
+    # Сохраняем домен в .env
     if grep -q "^SLUGA_DOMAIN=" .env 2>/dev/null; then
         sed -i "s|^SLUGA_DOMAIN=.*|SLUGA_DOMAIN=$USER_DOMAIN|" .env
     else
         echo "SLUGA_DOMAIN=$USER_DOMAIN" >> .env
     fi
 
-    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8080)
+    # Добавляем SERVER_DOMAIN в .env если отсутствует (устаревший ключ для обратной совместимости)
+    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8888)
+    # Обновляем SERVER_PORT на 8888 если он всё ещё равен проблемному 8080
+    if [ "$SRV_PORT" = "8080" ]; then
+        sed -i 's|^SERVER_PORT=8080|SERVER_PORT=8888|' .env 2>/dev/null || true
+        SRV_PORT=8888
+        echo "   ⚠️  Порт 8080 занят системой хостинга — автоматически изменён на $SRV_PORT"
+    fi
+
     HTACCESS_CONTENT="<IfModule mod_rewrite.c>
 RewriteEngine On
 
-# 1. Проксирование WebSocket соединения SlugaGram
+# SLUGA Reverse Proxy — не редактировать вручную!
+# 1. WebSocket
 RewriteCond %{HTTP:Upgrade} =websocket [NC]
-RewriteRule ^ws(.*) ws://127.0.0.1:${SRV_PORT}/ws$1 [P,L]
+RewriteRule ^ws(.*) ws://127.0.0.1:${SRV_PORT}/ws\$1 [P,L]
 
-# 2. Проксирование проверки доступности /health
+# 2. Health-check
 RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-RewriteRule ^health(.*) http://127.0.0.1:${SRV_PORT}/health$1 [P,L]
+RewriteRule ^health(.*) http://127.0.0.1:${SRV_PORT}/health\$1 [P,L]
 
-# 3. Проксирование REST API и синтеза речи
+# 3. REST API
 RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-RewriteRule ^api/(.*) http://127.0.0.1:${SRV_PORT}/api/$1 [P,L]
+RewriteRule ^api/(.*) http://127.0.0.1:${SRV_PORT}/api/\$1 [P,L]
 </IfModule>"
 
-    # 1. Сохраняем в папке проекта
-    echo "$HTACCESS_CONTENT" > .htaccess
-    echo "   ✅ Файл .htaccess создан в папке проекта: $(pwd)/.htaccess"
+    # Записываем .htaccess в проект
+    printf '%s\n' "$HTACCESS_CONTENT" > .htaccess
+    echo "   ✅ .htaccess создан в: $(pwd)/.htaccess"
 
-    # 2. Если на хостинге (SpaceWeb и др.) корень сайта совпадает с домашней папкой
-    if [ -w "$HOME" ]; then
-        echo "$HTACCESS_CONTENT" > "$HOME/.htaccess"
-        echo "   🚀 Скопирован в корень веб-сервера хостинга: $HOME/.htaccess"
-    fi
+    # Ищем все возможные корни сайта SpaceWeb/Beget и копируем туда
+    HTACCESS_TARGETS=("$HOME")
+    for _candidate in \
+        "$HOME/${USER_DOMAIN}/public_html" \
+        "$HOME/${USER_DOMAIN}/www" \
+        "$HOME/${USER_DOMAIN}" \
+        "$HOME/public_html" \
+        "$HOME/www" \
+        "$HOME/web" \
+        "$HOME/htdocs"; do
+        [ -d "$_candidate" ] && HTACCESS_TARGETS+=("$_candidate")
+    done
+    for _dir in "${FOUND_DIRS[@]}"; do HTACCESS_TARGETS+=("$_dir"); done
 
-    # 3. Если есть классические папки сайтов (public_html / www) — копируем и туда
-    if [ ${#FOUND_DIRS[@]} -ge 1 ]; then
-        for pdir in "${FOUND_DIRS[@]}"; do
-            cp -f .htaccess "$pdir/.htaccess" 2>/dev/null || true
-            echo "   🚀 Скопирован в: $pdir/.htaccess"
-        done
-    fi
+    for _target in "${HTACCESS_TARGETS[@]}"; do
+        if [ -w "$_target" ]; then
+            printf '%s\n' "$HTACCESS_CONTENT" > "$_target/.htaccess"
+            echo "   🚀 .htaccess скопирован в: $_target/.htaccess"
+        fi
+    done
 
     FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
 else
-    echo "   ✅ Выбран прямой IP: ws://${SERVER_IP}:8080/ws"
-    FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
+    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8888)
+    echo "   ✅ Выбран прямой IP: ws://${SERVER_IP}:${SRV_PORT}/ws"
+    FINAL_CLIENT_URL="ws://${SERVER_IP}:${SRV_PORT}/ws"
 fi
 
 # ------------------------------------------------------------------------------
@@ -333,26 +359,37 @@ echo "🔹 [ШАГ 6/6] Запуск серверного агента..."
 # Запуск без sudo (nohup background daemon)
 read -p "   Запустить сервер в фоновом режиме прямо сейчас? [Y/n]: " RUN_BG
 if [[ ! "$RUN_BG" =~ ^[Nn]$ ]]; then
-    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8080)
-    # Освобождаем порт перед запуском
-    fuser -k ${SRV_PORT}/tcp 2>/dev/null || true
-    pkill -9 -f "main.py" 2>/dev/null || true
-    sleep 1
+    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8888)
 
-    nohup $PYTHON_BIN main.py start > sluga_server.log 2>&1 &
+    # Определяем путь к Python: ВСЕГДА .venv, никогда системный
+    VENV_PY="$SCRIPT_DIR/.venv/bin/python"
+    if [ ! -f "$VENV_PY" ]; then
+        VENV_PY="$SCRIPT_DIR/.venv/bin/python3"
+    fi
+    if [ ! -f "$VENV_PY" ]; then
+        VENV_PY="$PYTHON_BIN"  # fallback на системный если venv не найден
+    fi
+    echo "   🐍 Используемый Python: $VENV_PY"
+
+    # Убиваем предыдущий экземпляр SLUGA
+    pkill -f "main.py start" 2>/dev/null || true
+    fuser -k ${SRV_PORT}/tcp 2>/dev/null || true
+    sleep 2
+
+    nohup "$VENV_PY" main.py start > sluga_server.log 2>&1 &
     SERVER_PID=$!
-    # Защита от SIGHUP при выходе из SSH
     disown -h $SERVER_PID 2>/dev/null || true
     echo "   💾 PID сервера: $SERVER_PID (сохранен в server.pid)"
     echo $SERVER_PID > server.pid
 
-    # Надежная проверка готовности через /health (цикл до 15с)
-    echo "   ⏳ Ожидание готовности сервера..."
+    # Ожидание готовности (30с)
+    echo "   ⏳ Ожидание готовности сервера (до 30с)..."
     SERVER_READY=false
-    for i in {1..15}; do
+    for i in {1..30}; do
         sleep 1
         if curl -s --max-time 1 "http://127.0.0.1:${SRV_PORT}/health" >/dev/null 2>&1; then
             SERVER_READY=true
+            echo "   ✅ Сервер ответил на /health за ${i}с!"
             break
         fi
     done
@@ -373,29 +410,33 @@ if [[ ! "$RUN_BG" =~ ^[Nn]$ ]]; then
         done
     fi
 
-    # Создание watchdog.sh для перезапуска при падении
-    cat > watchdog.sh << 'WATCHDOG_EOF'
+    # Создание watchdog.sh — использует .venv/bin/python
+    WATCHDOG_PORT="$SRV_PORT"
+    WATCHDOG_PY="$VENV_PY"
+    cat > watchdog.sh << WATCHDOG_EOF
 #!/usr/bin/env bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-if ! curl -s --max-time 2 "http://127.0.0.1:8080/health" >/dev/null 2>&1; then
-    echo "$(date): SLUGA не отвечает, перезапуск..." >> sluga_watchdog.log
+SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+cd "\$SCRIPT_DIR"
+if ! curl -s --max-time 2 "http://127.0.0.1:${WATCHDOG_PORT}/health" >/dev/null 2>&1; then
+    echo "\$(date): SLUGA не отвечает, перезапуск..." >> sluga_watchdog.log
     pkill -f "main.py start" 2>/dev/null || true
     sleep 2
-    nohup python main.py start >> sluga_server.log 2>&1 &
-    disown -h $! 2>/dev/null || true
-    echo $! > server.pid
+    nohup ${WATCHDOG_PY} main.py start >> sluga_server.log 2>&1 &
+    disown -h \$! 2>/dev/null || true
+    echo \$! > server.pid
 fi
 WATCHDOG_EOF
     chmod +x watchdog.sh
-    echo "   ✅ Создан watchdog.sh для автоматического перезапуска."
-    echo "   💡 Для добавления в cron: (crontab -l; echo '*/5 * * * * $SCRIPT_DIR/watchdog.sh') | crontab -"
+    echo "   ✅ Создан watchdog.sh (порт $SRV_PORT, Python: $VENV_PY)"
+    echo "   💡 Добавить в cron: (crontab -l 2>/dev/null; echo '*/5 * * * * $SCRIPT_DIR/watchdog.sh') | crontab -"
 
     if [ "$SERVER_READY" = true ]; then
         echo "   ✅ Сервер успешно запущен и отвечает на /health (PID: $SERVER_PID)!"
-        echo "   Логи сервера пишутся в: sluga_server.log"
     else
-        echo "   ⚠️ Сервер запущен, но не ответил за 15с. Проверьте логи: tail -f sluga_server.log"
+        echo ""
+        echo "   ⚠️  Сервер не ответил за 30с. Диагностика:"
+        echo "   tail -n 20 sluga_server.log"
+        tail -n 10 sluga_server.log 2>/dev/null || true
     fi
 fi
 
