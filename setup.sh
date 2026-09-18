@@ -187,8 +187,19 @@ echo ""
 echo "🔹 [ШАГ 5/6] Настройка канала связи со SlugaGram..."
 SERVER_IP=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "IP_СЕРВЕРА")
 
-# Автопроверка наличия доменов и папок сайтов на хостинге SpaceWeb / Linux
-FOUND_DIRS=($(find "$HOME" -maxdepth 3 -type d -name "public_html" 2>/dev/null || true))
+# Автопроверка наличия доменов и папок сайтов на хостинге SpaceWeb / Linux / Beget
+FOUND_DIRS=()
+# Стандартный поиск public_html
+while IFS= read -r -d '' dir; do
+    FOUND_DIRS+=("$dir")
+done < <(find "$HOME" -maxdepth 3 -type d -name "public_html" -print0 2>/dev/null || true)
+
+# Дополнительный поиск: $HOME/$USER_DOMAIN/www
+if [ -n "${USER_DOMAIN:-}" ]; then
+    for extra in "$HOME/$USER_DOMAIN/www" "$HOME/$USER_DOMAIN" "$HOME/domains/$USER_DOMAIN/public_html"; do
+        if [ -d "$extra" ]; then FOUND_DIRS+=("$extra"); fi
+    done
+fi
 
 SAVED_DOMAIN=$(grep -E "^SLUGA_DOMAIN=" .env 2>/dev/null | cut -d '=' -f2- || true)
 if [ -n "$SAVED_DOMAIN" ]; then
@@ -318,12 +329,28 @@ if [[ ! "$RUN_BG" =~ ^[Nn]$ ]]; then
     pkill -f "main.py start" 2>/dev/null || true
     nohup $PYTHON_BIN main.py start > sluga_server.log 2>&1 &
     SERVER_PID=$!
-    sleep 2
+    # Защита от SIGHUP при выходе из SSH
+    disown -h $SERVER_PID 2>/dev/null || true
+    echo "   💾 PID сервера: $SERVER_PID (сохранен в server.pid)"
+    echo $SERVER_PID > server.pid
+
+    # Надежная проверка готовности через /health (цикл до 15с)
+    echo "   ⏳ Ожидание готовности сервера..."
+    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8080)
+    SERVER_READY=false
+    for i in {1..15}; do
+        sleep 1
+        if curl -s --max-time 1 "http://127.0.0.1:${SRV_PORT}/health" >/dev/null 2>&1; then
+            SERVER_READY=true
+            break
+        fi
+    done
 
     if [ "$USE_CF" = true ] && [ -f "tools/cloudflared" ]; then
         echo "   🚀 Запуск Cloudflare туннеля в фоне..."
         pkill -f "cloudflared tunnel" 2>/dev/null || true
-        nohup ./tools/cloudflared tunnel --url http://127.0.0.1:8080 > tunnel.log 2>&1 &
+        nohup ./tools/cloudflared tunnel --url "http://127.0.0.1:${SRV_PORT}" > tunnel.log 2>&1 &
+        disown -h $! 2>/dev/null || true
         echo "   ⏳ Ожидание выделения защищенного адреса WSS..."
         for i in {1..10}; do
             sleep 1
@@ -335,11 +362,29 @@ if [[ ! "$RUN_BG" =~ ^[Nn]$ ]]; then
         done
     fi
 
-    if ps -p $SERVER_PID > /dev/null 2>&1; then
-        echo "   ✅ Сервер успешно запущен в фоновом режиме (PID: $SERVER_PID)!"
+    # Создание watchdog.sh для перезапуска при падении
+    cat > watchdog.sh << 'WATCHDOG_EOF'
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+if ! curl -s --max-time 2 "http://127.0.0.1:8080/health" >/dev/null 2>&1; then
+    echo "$(date): SLUGA не отвечает, перезапуск..." >> sluga_watchdog.log
+    pkill -f "main.py start" 2>/dev/null || true
+    sleep 2
+    nohup python main.py start >> sluga_server.log 2>&1 &
+    disown -h $! 2>/dev/null || true
+    echo $! > server.pid
+fi
+WATCHDOG_EOF
+    chmod +x watchdog.sh
+    echo "   ✅ Создан watchdog.sh для автоматического перезапуска."
+    echo "   💡 Для добавления в cron: (crontab -l; echo '*/5 * * * * $SCRIPT_DIR/watchdog.sh') | crontab -"
+
+    if [ "$SERVER_READY" = true ]; then
+        echo "   ✅ Сервер успешно запущен и отвечает на /health (PID: $SERVER_PID)!"
         echo "   Логи сервера пишутся в: sluga_server.log"
     else
-        echo "   ℹ️ Для ручного запуска введите: python main.py start"
+        echo "   ⚠️ Сервер запущен, но не ответил за 15с. Проверьте логи: tail -f sluga_server.log"
     fi
 fi
 

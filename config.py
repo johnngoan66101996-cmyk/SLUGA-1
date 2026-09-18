@@ -154,12 +154,17 @@ class ConfigMethodsMixin:
 
     def update_model_runtime(self, new_model: str) -> str:
         clean_model = new_model.strip().strip("<>").strip()
-        if clean_model in LITEAI_MODELS_CATALOG or "/" in clean_model:
-            self.liteai_model = clean_model
-            self._persist_env_var("LITEAI_MODEL", clean_model)
-            meta = LITEAI_MODELS_CATALOG.get(clean_model, {})
+        # Нормализуем имя модели: claude-sonnet-4.6 → claude-sonnet-4-6 (для совместимости .env)
+        normalized = clean_model.replace(".", "-")
+        if normalized in LITEAI_MODELS_CATALOG or "/" in clean_model:
+            self.liteai_model = normalized
+            self._persist_env_var("LITEAI_MODEL", normalized)
+            meta = LITEAI_MODELS_CATALOG.get(normalized, {})
             tier_info = meta.get("consumption", "Стандартный расход")
-            return f"Модель переключена на: {clean_model} ({tier_info})"
+            return f"Модель переключена на: {normalized} ({tier_info})"
+        # Неизвестная модель — сохраняем как есть
+        self.liteai_model = clean_model
+        self._persist_env_var("LITEAI_MODEL", clean_model)
         return f"Модель {clean_model} сохранена в конфигурации."
 
     def set_bot_token(self, new_token: str) -> str:
@@ -204,7 +209,7 @@ try:
         # 2. Шлюз LiteAI (Официальный шлюз нейросетей в РФ)
         liteai_api_key: Optional[str] = Field(default=None, alias="LITEAI_API_KEY")
         liteai_base_url: str = Field(default="https://api.liteai.tech/v1", alias="LITEAI_BASE_URL")
-        liteai_model: str = Field(default="claude-sonnet-4.6", alias="LITEAI_MODEL")
+        liteai_model: str = Field(default="claude-sonnet-4-6", alias="LITEAI_MODEL")
 
         # 3. Сетевые параметры сервера
         server_host: str = Field(default="0.0.0.0", alias="SERVER_HOST")
@@ -222,7 +227,7 @@ except ImportError:
             self.sluga_bot_token = os.getenv("SLUGA_BOT_TOKEN", "sluga-core-token")
             self.liteai_api_key = os.getenv("LITEAI_API_KEY", None)
             self.liteai_base_url = os.getenv("LITEAI_BASE_URL", "https://api.liteai.tech/v1")
-            self.liteai_model = os.getenv("LITEAI_MODEL", "claude-sonnet-4.6")
+            self.liteai_model = os.getenv("LITEAI_MODEL", "claude-sonnet-4-6").replace(".", "-")
             self.server_host = os.getenv("SERVER_HOST", "0.0.0.0")
             self.server_port = int(os.getenv("SERVER_PORT", "8080"))
             self.sqlite_db_path = os.getenv("SQLITE_DB_PATH", "./data/sluga_memory.db")

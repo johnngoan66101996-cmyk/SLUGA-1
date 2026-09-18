@@ -1,0 +1,978 @@
+/* ==========================================================================
+   SLUGA Telegram Messenger — Core Stylesheet
+   Фирменная тёмная палитра Telegram Desktop / Web K (1 в 1)
+   ========================================================================== */
+
+:root {
+  --tg-bg-main: #0e1621;
+  --tg-bg-sidebar: #17212b;
+  --tg-bg-chat-header: #17212b;
+  --tg-bg-active-chat: #2b5278;
+  --tg-bg-hover-chat: #202b36;
+  
+  --tg-bubble-in: #182533;
+  --tg-bubble-out: #2b5278;
+  --tg-bubble-code: #0f1821;
+  
+  --tg-text-primary: #f5f5f5;
+  --tg-text-secondary: #7f91a4;
+  --tg-text-link: #6ab2f2;
+  --tg-accent-blue: #5288c1;
+  --tg-accent-hover: #6499d3;
+  
+  --tg-border: #101921;
+  --tg-input-bg: #17212b;
+  --tg-input-field: #242f3d;
+  
+  --tg-badge-bg: #5288c1;
+  --tg-badge-text: #ffffff;
+  
+  --font-family: -apple-system, BlinkMacSystemFont, "Roboto", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", Consolas, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--tg-bg-main);
+  color: var(--tg-primary-text, #f5f5f5);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  user-select: none;
+}
+
+/* --- Главный контейнер приложения --- */
+.app-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+/* ==========================================================================
+   ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ
+   ========================================================================== */
+.sidebar {
+  width: 380px;
+  min-width: 320px;
+  background-color: var(--tg-bg-sidebar);
+  border-right: 1px solid var(--tg-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  transition: transform 0.25s ease;
+}
+
+.sidebar-header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--tg-border);
+}
+
+.btn-menu {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.btn-menu:hover {
+  background: var(--tg-bg-hover-chat);
+  color: var(--tg-text-primary);
+}
+
+.search-container {
+  flex: 1;
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  background-color: var(--tg-input-field);
+  border: 1px solid transparent;
+  border-radius: 22px;
+  padding: 8px 16px 8px 36px;
+  color: var(--tg-text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  border-color: var(--tg-accent-blue);
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--tg-text-secondary);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* Фильтры чатов (Вкладки Telegram) */
+.chat-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--tg-border);
+  background: var(--tg-bg-sidebar);
+}
+
+.tab-pill {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab-pill.active {
+  background: var(--tg-accent-blue);
+  color: #ffffff;
+}
+
+.tab-pill:hover:not(.active) {
+  background: var(--tg-bg-hover-chat);
+  color: var(--tg-text-primary);
+}
+
+/* Список чатов */
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.chat-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.chat-item:hover {
+  background-color: var(--tg-bg-hover-chat);
+}
+
+.chat-item.active {
+  background-color: var(--tg-bg-active-chat);
+}
+
+.chat-item.active .chat-title,
+.chat-item.active .chat-snippet,
+.chat-item.active .chat-time {
+  color: #ffffff;
+}
+
+.chat-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2b5278, #5288c1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.online-dot {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 12px;
+  height: 12px;
+  background-color: #4fae4e;
+  border: 2px solid var(--tg-bg-sidebar);
+  border-radius: 50%;
+}
+
+.chat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-info-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.chat-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--tg-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-time {
+  font-size: 12px;
+  color: var(--tg-text-secondary);
+}
+
+.chat-snippet {
+  font-size: 13px;
+  color: var(--tg-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   ПРАВАЯ ПАНЕЛЬ: ОКНО ЧАТА
+   ========================================================================== */
+.chat-window {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #0e1621;
+  position: relative;
+  /* Фирменный Telegram Doodle wallpaper: математические формулы и символы */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'%3E%3Cpath d='M30 40 L60 40 M45 25 L45 55 M120 30 C130 15 150 15 160 30 C170 45 150 60 140 70 L120 70 M130 85 L155 85 M220 35 L250 65 M250 35 L220 65 M40 130 C40 110 70 110 70 130 C70 150 40 150 40 130 Z M130 140 L160 140 L145 115 Z M220 120 C230 115 245 125 240 140 C235 155 215 150 225 135 M50 220 L75 245 M75 220 L50 245 M130 220 C145 205 165 220 155 235 C145 250 125 235 140 220 M215 220 L245 220 L230 245 Z' fill='none' stroke='rgba(255,255,255,0.04)' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ctext x='85' y='65' fill='rgba(255,255,255,0.035)' font-family='sans-serif' font-size='14'%3Ee=mc²%3C/text%3E%3Ctext x='20' y='185' fill='rgba(255,255,255,0.035)' font-family='sans-serif' font-size='15'%3E∫f(x)dx%3C/text%3E%3Ctext x='180' y='190' fill='rgba(255,255,255,0.035)' font-family='sans-serif' font-size='13'%3Eπ ≈ 3.14%3C/text%3E%3Ctext x='95' y='260' fill='rgba(255,255,255,0.035)' font-family='sans-serif' font-size='13'%3Eλ=h/p%3C/text%3E%3C/svg%3E");
+  background-size: 280px 280px;
+}
+
+
+/* Шапка чата */
+.chat-header {
+  height: 56px;
+  background-color: var(--tg-bg-chat-header);
+  border-bottom: 1px solid var(--tg-border);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 5;
+}
+
+.chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-back {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.header-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2b5278, #5288c1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.header-info h2 {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--tg-text-primary);
+}
+
+.header-status {
+  font-size: 12px;
+  color: var(--tg-accent-blue);
+}
+
+.chat-header-right {
+  display: flex;
+  gap: 8px;
+}
+
+.header-btn {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.15s;
+}
+
+.header-btn:hover {
+  background: var(--tg-bg-hover-chat);
+  color: var(--tg-text-primary);
+}
+
+/* Область сообщений */
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  user-select: text;
+}
+
+/* Разделитель дат */
+.date-badge {
+  align-self: center;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--tg-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 12px;
+  margin: 8px 0;
+  backdrop-filter: blur(4px);
+}
+
+/* Пузыри сообщений */
+.message-bubble {
+  max-width: 75%;
+  min-width: 90px;
+  padding: 8px 12px 6px 12px;
+  border-radius: 12px;
+  position: relative;
+  word-wrap: break-word;
+  line-height: 1.45;
+  font-size: 14.5px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message-in {
+  align-self: flex-start;
+  background-color: var(--tg-bubble-in);
+  border-bottom-left-radius: 4px;
+  color: var(--tg-text-primary);
+}
+
+.message-out {
+  align-self: flex-end;
+  background-color: var(--tg-bubble-out);
+  border-bottom-right-radius: 4px;
+  color: #ffffff;
+}
+
+.message-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  float: right;
+  margin-left: 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.checkmarks {
+  color: #4fae4e;
+  font-size: 12px;
+}
+
+/* Форматирование блоков кода (ИИ-Хирург) */
+.code-block-wrapper {
+  background: var(--tg-bubble-code);
+  border-radius: 8px;
+  margin: 8px 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--tg-text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.btn-copy-code {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--tg-text-primary);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-copy-code:hover {
+  background: var(--tg-accent-blue);
+  color: #ffffff;
+}
+
+.code-content {
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre;
+  color: #e0e0e0;
+}
+
+/* Аудио-плеер голосовых сообщений Telegram */
+.voice-bubble {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.btn-play-voice {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--tg-accent-blue);
+  border: none;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s;
+}
+
+.btn-play-voice:active {
+  transform: scale(0.95);
+}
+
+.voice-waveform {
+  flex: 1;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.waveform-bar {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  min-height: 4px;
+}
+
+.waveform-bar.played {
+  background: #ffffff;
+}
+
+.voice-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Превью прикрепленных файлов (скрепка) */
+.attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-top: 6px;
+}
+
+.attachment-icon {
+  font-size: 24px;
+}
+
+.attachment-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-size {
+  font-size: 11px;
+  color: var(--tg-text-secondary);
+}
+
+/* Превью картинки */
+.image-preview-msg {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  margin-top: 6px;
+  display: block;
+  object-fit: cover;
+}
+
+/* Индикатор прогресса SLUGA */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(24, 37, 51, 0.7);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--tg-text-secondary);
+  align-self: flex-start;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* ==========================================================================
+   НИЖНЯЯ ПАНЕЛЬ ВВОДА
+   ========================================================================== */
+.input-panel {
+  padding: 10px 16px;
+  background-color: var(--tg-bg-chat-header);
+  border-top: 1px solid var(--tg-border);
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  position: relative;
+}
+
+/* Синяя кнопка «Меню» Telegram */
+.tg-menu-btn {
+  background: var(--tg-accent-blue);
+  color: #ffffff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+  flex-shrink: 0;
+  height: 38px;
+}
+
+.tg-menu-btn:hover {
+  background: var(--tg-accent-hover);
+}
+
+.tg-menu-btn:active {
+  transform: scale(0.95);
+}
+
+/* Иконки в строке ввода */
+.tg-icon-btn {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.tg-icon-btn:hover {
+  background: var(--tg-bg-hover-chat);
+  color: var(--tg-text-primary);
+}
+
+/* Всплывающее меню команд бота (Telegram Style) */
+.telegram-command-popup {
+  position: absolute;
+  bottom: 66px;
+  left: 16px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: #17212b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUpCmd 0.18s ease-out;
+}
+
+.telegram-command-popup.active {
+  display: flex;
+}
+
+@keyframes slideUpCmd {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.command-popup-header {
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tg-text-secondary);
+}
+
+.btn-close-cmd {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.command-list {
+  padding: 6px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.command-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cmd-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2b5278, #5288c1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.cmd-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cmd-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tg-accent-blue);
+}
+
+.cmd-desc {
+  font-size: 12.5px;
+  color: var(--tg-text-secondary);
+}
+
+.tg-input-box-wrapper {
+  flex: 1;
+  background-color: var(--tg-input-field);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 14px;
+  max-height: 150px;
+}
+
+.tg-message-textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--tg-text-primary);
+  font-size: 14.5px;
+  line-height: 1.4;
+  outline: none;
+  resize: none;
+  max-height: 120px;
+  font-family: inherit;
+}
+
+.tg-message-textarea::placeholder {
+  color: var(--tg-text-secondary);
+}
+
+.form-hint {
+  font-size: 11.5px;
+  color: var(--tg-text-secondary);
+  line-height: 1.35;
+}
+
+
+/* Панель прикрепленных файлов над вводом */
+.attachment-preview-bar {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+}
+
+.attach-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.btn-remove-chip {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.message-textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--tg-text-primary);
+  font-size: 14.5px;
+  line-height: 1.4;
+  outline: none;
+  resize: none;
+  max-height: 120px;
+  font-family: inherit;
+}
+
+.message-textarea::placeholder {
+  color: var(--tg-text-secondary);
+}
+
+/* Кнопки микрофона и отправки */
+.action-btn-circle {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background-color: var(--tg-accent-blue);
+  border: none;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.action-btn-circle:hover {
+  background-color: var(--tg-accent-hover);
+}
+
+.action-btn-circle.recording {
+  background-color: #e53935;
+  animation: pulse-mic 1s infinite alternate;
+}
+
+@keyframes pulse-mic {
+  from { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.5); }
+  to { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(229, 57, 53, 0); }
+}
+
+/* ==========================================================================
+   МОДАЛЬНОЕ ОКНО НАСТРОЕК (Менеджер Ключей & Безопасность)
+   ========================================================================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal-card {
+  width: 440px;
+  max-width: 90vw;
+  background: var(--tg-bg-sidebar);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: modalPop 0.2s ease-out;
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-header {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--tg-border);
+}
+
+.modal-header h3 {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--tg-text-primary);
+}
+
+.btn-close-modal {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 13px;
+  color: var(--tg-text-secondary);
+  font-weight: 500;
+}
+
+.form-input, .form-select {
+  background: var(--tg-input-field);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--tg-text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.form-input:focus, .form-select:focus {
+  border-color: var(--tg-accent-blue);
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--tg-text-secondary);
+  color: var(--tg-text-primary);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--tg-accent-blue);
+  border: none;
+  color: #ffffff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   АДАПТИВНОСТЬ ПОД ВСЕ УСТРОЙСТВА (Mobile & Tablet)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100vw;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 20;
+  }
+
+  .chat-window {
+    width: 100vw;
+  }
+
+  .btn-back {
+    display: block;
+  }
+
+  /* Когда открыт чат на мобильном, скрываем сайдбар */
+  .app-container.chat-active .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .message-bubble {
+    max-width: 88%;
+  }
+}

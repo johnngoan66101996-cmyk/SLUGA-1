@@ -14,7 +14,7 @@ from typing import Dict, Any, List, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Query, status
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,6 +42,23 @@ UPLOADS_DIR = BASE_DIR / "data" / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
+# Раздача статических файлов клиента (client/)
+CLIENT_DIR = BASE_DIR / "client"
+if CLIENT_DIR.exists():
+    _client_js = CLIENT_DIR / "js"
+    _client_css = CLIENT_DIR / "css"
+    _client_assets = CLIENT_DIR / "assets"
+    if _client_js.exists():
+        app.mount("/js", StaticFiles(directory=str(_client_js)), name="client_js")
+    if _client_css.exists():
+        app.mount("/css", StaticFiles(directory=str(_client_css)), name="client_css")
+    if _client_assets.exists():
+        app.mount("/assets", StaticFiles(directory=str(_client_assets)), name="client_assets")
+    logger.info(f"Клиентские файлы подключены из: {CLIENT_DIR}")
+else:
+    CLIENT_DIR = None
+    logger.warning("Папка client/ не найдена — клиент должен раздаваться отдельно")
+
 
 class ConnectionManager:
     def __init__(self):
@@ -63,14 +80,24 @@ manager = ConnectionManager()
 
 
 @app.get("/")
-async def root_status():
-    """Публичный статус-пинг сервера."""
+async def root_index():
+    """HTML-страница мессенджера SLUGA. Если client/ отсутствует — возвращаем JSON-статус."""
+    if CLIENT_DIR is not None:
+        html_path = BASE_DIR / "client" / "index.html"
+        if html_path.exists():
+            return FileResponse(str(html_path), media_type="text/html")
     return JSONResponse({
         "status": "online",
         "service": "SLUGA AI Server",
         "auth_required": True,
         "hint": "Подключение клиентов осуществляется через WebSocket /ws?token=YOUR_BOT_TOKEN"
     })
+
+
+@app.get("/health")
+async def health_check():
+    """Безавторизационный пинг-эндпойнт для проверки доступности сервера (используется кнопкой Тест)."""
+    return JSONResponse({"ok": True, "service": "SLUGA AI Server", "model": settings.liteai_model})
 
 
 @app.get("/api/status")

@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SLUGA_bot — Telegram AI</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0e1621">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="/assets/icon-192.png" type="image/png">
+  <style>
+
+/* ==========================================================================
+   SLUGA Telegram Messenger — Core Stylesheet
+   Фирменная тёмная палитра Telegram Desktop / Web K (1 в 1)
+   ========================================================================== */
+
+:root {
+  --tg-bg-main: #0e1621;
+  --tg-bg-sidebar: #17212b;
+  --tg-bg-chat-header: #17212b;
+  --tg-bg-active-chat: #2b5278;
+  --tg-bg-hover-chat: #202b36;
+  
+  --tg-bubble-in: #182533;
+  --tg-bubble-out: #2b5278;
+  --tg-bubble-code: #0f1821;
+  
+  --tg-text-primary: #f5f5f5;
+  --tg-text-secondary: #7f91a4;
+  --tg-text-link: #6ab2f2;
+  --tg-accent-blue: #5288c1;
+  --tg-accent-hover: #6499d3;
+  
+  --tg-border: #101921;
+  --tg-input-bg: #17212b;
+  --tg-input-field: #242f3d;
+  
+  --tg-badge-bg: #5288c1;
+  --tg-badge-text: #ffffff;
+  
+  --font-family: -apple-system, BlinkMacSystemFont, "Roboto", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", Consolas, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--tg-bg-main);
+  color: var(--tg-primary-text, #f5f5f5);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  user-select: none;
+}
+
+/* --- Главный контейнер приложения --- */
+.app-container {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+/* ==========================================================================
+   ЛЕВАЯ ПАНЕЛЬ: СПИСОК ЧАТОВ
+   ========================================================================== */
+.sidebar {
+  width: 380px;
+  min-width: 320px;
+  background-color: var(--tg-bg-sidebar);
+  border-right: 1px solid var(--tg-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  transition: transform 0.25s ease;
+}
+
+.sidebar-header {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--tg-border);
+}
+
+.btn-menu {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.btn-menu:hover {
+  background: var(--tg-bg-hover-chat);
+  color: var(--tg-text-primary);
+}
+
+.search-container {
+  flex: 1;
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  background-color: var(--tg-input-field);
+  border: 1px solid transparent;
+  border-radius: 22px;
+  padding: 8px 16px 8px 36px;
+  color: var(--tg-text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-input:focus {
+  border-color: var(--tg-accent-blue);
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--tg-text-secondary);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+/* Фильтры чатов (Вкладки Telegram) */
+.chat-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--tg-border);
+  background: var(--tg-bg-sidebar);
+}
+
+.tab-pill {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tab-pill.active {
+  background: var(--tg-accent-blue);
+  color: #ffffff;
+}
+
+.tab-pill:hover:not(.active) {
+  background: var(--tg-bg-hover-chat);
+  color: var(--tg-text-primary);
+}
+
+/* Список чатов */
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.chat-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.chat-item:hover {
+  background-color: var(--tg-bg-hover-chat);
+}
+
+.chat-item.active {
+  background-color: var(--tg-bg-active-chat);
+}
+
+.chat-item.active .chat-title,
+.chat-item.active .chat-snippet,
+.chat-item.active .chat-time {
+  color: #ffffff;
+}
+
+.chat-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2b5278, #5288c1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.online-dot {
+  position: absolute;
+  bottom: 1px;
+  right: 1px;
+  width: 12px;
+  height: 12px;
+  background-color: #4fae4e;
+  border: 2px solid var(--tg-bg-sidebar);
+  border-radius: 50%;
+}
+
+.chat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-info-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.chat-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--tg-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-time {
+  font-size: 12px;
+  color: var(--tg-text-secondary);
+}
+
+.chat-snippet {
+  font-size: 13px;
+  color: var(--tg-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ==========================================================================
+   ПРАВАЯ ПАНЕЛЬ: ОКНО ЧАТА
+   ========================================================================== */
+.chat-window {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #0e1621;
+  position: relative;
+  /* Фирменный Telegram Doodle wallpaper: математические формулы и символы */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280' viewBox='0 0 280 280'%3E%3Cpath d='M30 40 L60 40 M45 25 L45 55 M120 30 C130 15 150 15 160 30 C170 45 150 60 140 70 L120 70 M130 85 L155 85 M220 35 L250 65 M250 35 L220 65 M40 130 C40 110 70 110 70 130 C70 150 40 150 40 130 Z M130 140 L160 140 L145 115 Z M220 120 C230 115 245 125 240 140 C235 155 215 150 225 135 M50 220 L75 245 M75 220 L50 245 M130 220 C145 205 165 220 155 235 C145 250 125 235 140 220 M215 220 L245 220 L230 245 Z' fill='none' stroke='rgba(255,255,255,0.04)' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ctext x='85' y='65' fill='rgba(255,255,255,0.035)' font-family='sans-serif' font-size='14'%3Ee=mc²%3C/text%3E%3Ctext x='20' y='185' fill='rgba(255,255,255,0.035)' font-family='sans-serif' font-size='15'%3E∫f(x)dx%3C/text%3E%3Ctext x='180' y='190' fill='rgba(255,255,255,0.035)' font-family='sans-serif' font-size='13'%3Eπ ≈ 3.14%3C/text%3E%3Ctext x='95' y='260' fill='rgba(255,255,255,0.035)' font-family='sans-serif' font-size='13'%3Eλ=h/p%3C/text%3E%3C/svg%3E");
+  background-size: 280px 280px;
+}
+
+
+/* Шапка чата */
+.chat-header {
+  height: 56px;
+  background-color: var(--tg-bg-chat-header);
+  border-bottom: 1px solid var(--tg-border);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 5;
+}
+
+.chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-back {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px;
+}
+
+.header-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2b5278, #5288c1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.header-info h2 {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--tg-text-primary);
+}
+
+.header-status {
+  font-size: 12px;
+  color: var(--tg-accent-blue);
+}
+
+.chat-header-right {
+  display: flex;
+  gap: 8px;
+}
+
+.header-btn {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  transition: all 0.15s;
+}
+
+.header-btn:hover {
+  background: var(--tg-bg-hover-chat);
+  color: var(--tg-text-primary);
+}
+
+/* Область сообщений */
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  user-select: text;
+}
+
+/* Разделитель дат */
+.date-badge {
+  align-self: center;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--tg-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 12px;
+  margin: 8px 0;
+  backdrop-filter: blur(4px);
+}
+
+/* Пузыри сообщений */
+.message-bubble {
+  max-width: 75%;
+  min-width: 90px;
+  padding: 8px 12px 6px 12px;
+  border-radius: 12px;
+  position: relative;
+  word-wrap: break-word;
+  line-height: 1.45;
+  font-size: 14.5px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.message-in {
+  align-self: flex-start;
+  background-color: var(--tg-bubble-in);
+  border-bottom-left-radius: 4px;
+  color: var(--tg-text-primary);
+}
+
+.message-out {
+  align-self: flex-end;
+  background-color: var(--tg-bubble-out);
+  border-bottom-right-radius: 4px;
+  color: #ffffff;
+}
+
+.message-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  float: right;
+  margin-left: 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.checkmarks {
+  color: #4fae4e;
+  font-size: 12px;
+}
+
+/* Форматирование блоков кода (ИИ-Хирург) */
+.code-block-wrapper {
+  background: var(--tg-bubble-code);
+  border-radius: 8px;
+  margin: 8px 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--tg-text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.btn-copy-code {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--tg-text-primary);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-copy-code:hover {
+  background: var(--tg-accent-blue);
+  color: #ffffff;
+}
+
+.code-content {
+  padding: 10px 12px;
+  overflow-x: auto;
+  white-space: pre;
+  color: #e0e0e0;
+}
+
+/* Аудио-плеер голосовых сообщений Telegram */
+.voice-bubble {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.btn-play-voice {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--tg-accent-blue);
+  border: none;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.1s;
+}
+
+.btn-play-voice:active {
+  transform: scale(0.95);
+}
+
+.voice-waveform {
+  flex: 1;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.waveform-bar {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  min-height: 4px;
+}
+
+.waveform-bar.played {
+  background: #ffffff;
+}
+
+.voice-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Превью прикрепленных файлов (скрепка) */
+.attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-top: 6px;
+}
+
+.attachment-icon {
+  font-size: 24px;
+}
+
+.attachment-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-size {
+  font-size: 11px;
+  color: var(--tg-text-secondary);
+}
+
+/* Превью картинки */
+.image-preview-msg {
+  max-width: 100%;
+  max-height: 320px;
+  border-radius: 8px;
+  margin-top: 6px;
+  display: block;
+  object-fit: cover;
+}
+
+/* Индикатор прогресса SLUGA */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(24, 37, 51, 0.7);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--tg-text-secondary);
+  align-self: flex-start;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* ==========================================================================
+   НИЖНЯЯ ПАНЕЛЬ ВВОДА
+   ========================================================================== */
+.input-panel {
+  padding: 10px 16px;
+  background-color: var(--tg-bg-chat-header);
+  border-top: 1px solid var(--tg-border);
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  position: relative;
+}
+
+/* Синяя кнопка «Меню» Telegram */
+.tg-menu-btn {
+  background: var(--tg-accent-blue);
+  color: #ffffff;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+  flex-shrink: 0;
+  height: 38px;
+}
+
+.tg-menu-btn:hover {
+  background: var(--tg-accent-hover);
+}
+
+.tg-menu-btn:active {
+  transform: scale(0.95);
+}
+
+/* Иконки в строке ввода */
+.tg-icon-btn {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.tg-icon-btn:hover {
+  background: var(--tg-bg-hover-chat);
+  color: var(--tg-text-primary);
+}
+
+/* Всплывающее меню команд бота (Telegram Style) */
+.telegram-command-popup {
+  position: absolute;
+  bottom: 66px;
+  left: 16px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: #17212b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+  z-index: 50;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUpCmd 0.18s ease-out;
+}
+
+.telegram-command-popup.active {
+  display: flex;
+}
+
+@keyframes slideUpCmd {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.command-popup-header {
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tg-text-secondary);
+}
+
+.btn-close-cmd {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.command-list {
+  padding: 6px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.command-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cmd-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2b5278, #5288c1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
+.cmd-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cmd-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tg-accent-blue);
+}
+
+.cmd-desc {
+  font-size: 12.5px;
+  color: var(--tg-text-secondary);
+}
+
+/* Всплывающий Telegram Emoji Picker */
+.telegram-emoji-popup {
+  position: absolute;
+  bottom: 66px;
+  right: 16px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  background: #17212b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUpCmd 0.18s ease-out;
+}
+
+.telegram-emoji-popup.active {
+  display: flex !important;
+}
+
+.emoji-popup-header {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tg-text-secondary);
+}
+
+.btn-close-emoji {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.btn-close-emoji:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.emoji-tabs {
+  display: flex;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 6px;
+  gap: 4px;
+}
+
+.emoji-tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.emoji-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.emoji-tab-btn.active {
+  background: var(--tg-accent-blue);
+  color: #fff;
+}
+
+.emoji-grid {
+  padding: 10px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  user-select: none;
+}
+
+.emoji-btn-item {
+  background: none;
+  border: none;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 6px 0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s, background 0.1s;
+}
+
+.emoji-btn-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.2);
+}
+
+.emoji-btn-item:active {
+  transform: scale(0.95);
+}
+
+/* Индикатор активной голосовой записи в поле ввода */
+.voice-recording-hud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  font-size: 14px;
+  color: #f5f5f5;
+  width: 100%;
+}
+
+.recording-pulse-dot {
+  width: 12px;
+  height: 12px;
+  background: #e53935;
+  border-radius: 50%;
+  animation: pulse-dot 1s infinite alternate;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-dot {
+  from { transform: scale(0.85); opacity: 0.6; }
+  to { transform: scale(1.2); opacity: 1; }
+}
+
+.recording-time-text {
+  font-weight: 600;
+  color: #e53935;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.recording-live-text {
+  font-size: 13px;
+  color: var(--tg-text-secondary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-cancel-recording {
+  background: rgba(229, 57, 53, 0.15);
+  color: #ff6b6b;
+  border: 1px solid rgba(229, 57, 53, 0.3);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-cancel-recording:hover {
+  background: rgba(229, 57, 53, 0.3);
+  color: #ffffff;
+}
+
+.tg-input-box-wrapper {
+
+  flex: 1;
+  background-color: var(--tg-input-field);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 14px;
+  max-height: 150px;
+}
+
+.tg-message-textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--tg-text-primary);
+  font-size: 14.5px;
+  line-height: 1.4;
+  outline: none;
+  resize: none;
+  max-height: 120px;
+  font-family: inherit;
+}
+
+.tg-message-textarea::placeholder {
+  color: var(--tg-text-secondary);
+}
+
+.form-hint {
+  font-size: 11.5px;
+  color: var(--tg-text-secondary);
+  line-height: 1.35;
+}
+
+
+/* Панель прикрепленных файлов над вводом */
+.attachment-preview-bar {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+}
+
+.attach-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.btn-remove-chip {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.message-textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--tg-text-primary);
+  font-size: 14.5px;
+  line-height: 1.4;
+  outline: none;
+  resize: none;
+  max-height: 120px;
+  font-family: inherit;
+}
+
+.message-textarea::placeholder {
+  color: var(--tg-text-secondary);
+}
+
+/* Кнопки микрофона и отправки */
+.action-btn-circle {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background-color: var(--tg-accent-blue);
+  border: none;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.action-btn-circle:hover {
+  background-color: var(--tg-accent-hover);
+}
+
+.action-btn-circle.recording {
+  background-color: #e53935;
+  animation: pulse-mic 1s infinite alternate;
+}
+
+@keyframes pulse-mic {
+  from { transform: scale(1); box-shadow: 0 0 0 0 rgba(229, 57, 53, 0.5); }
+  to { transform: scale(1.08); box-shadow: 0 0 0 10px rgba(229, 57, 53, 0); }
+}
+
+/* ==========================================================================
+   МОДАЛЬНОЕ ОКНО НАСТРОЕК (Менеджер Ключей & Безопасность)
+   ========================================================================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal-card {
+  width: 440px;
+  max-width: 90vw;
+  background: var(--tg-bg-sidebar);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  animation: modalPop 0.2s ease-out;
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-header {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--tg-border);
+}
+
+.modal-header h3 {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--tg-text-primary);
+}
+
+.btn-close-modal {
+  background: none;
+  border: none;
+  color: var(--tg-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 13px;
+  color: var(--tg-text-secondary);
+  font-weight: 500;
+}
+
+.form-input, .form-select {
+  background: var(--tg-input-field);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--tg-text-primary);
+  font-size: 14px;
+  outline: none;
+}
+
+.form-input:focus, .form-select:focus {
+  border-color: var(--tg-accent-blue);
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--tg-text-secondary);
+  color: var(--tg-text-primary);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--tg-accent-blue);
+  border: none;
+  color: #ffffff;
+  padding: 8px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+/* ==========================================================================
+   АДАПТИВНОСТЬ ПОД ВСЕ УСТРОЙСТВА (Mobile & Tablet)
+   ========================================================================== */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100vw;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 20;
+  }
+
+  .chat-window {
+    width: 100vw;
+  }
+
+  .btn-back {
+    display: block;
+  }
+
+  /* Когда открыт чат на мобильном, скрываем сайдбар */
+  .app-container.chat-active .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .message-bubble {
+    max-width: 88%;
+  }
+}
+
+</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="app-container" id="appContainer">
+  <!-- ГЛАВНОЕ ОКНО ЧАТА TELEGRAM -->
+  <main class="chat-window" id="chatWindow">
+    <!-- Шапка Telegram (1 в 1 как на скрине) -->
+    <header class="chat-header">
+      <div class="chat-header-left">
+        <button class="header-back-btn" id="btnBackToSidebar" style="display: none;">←</button>
+        <div class="header-avatar-wrap">
+          <div class="header-avatar" id="headerAvatar">🤖</div>
+          <span class="online-indicator"></span>
+        </div>
+        <div class="header-info">
+          <div class="header-title-row">
+            <h2 id="headerTitle">SLUGA_bot</h2>
+          </div>
+          <span class="header-status" id="headerStatus">бот</span>
+        </div>
+      </div>
+      <div class="chat-header-right">
+        <button class="header-action-btn" id="btnSearchChat" title="Поиск по сообщениям">🔍</button>
+        <button class="header-action-btn" id="btnTopMenu" title="Настройки и опции">⋮</button>
+      </div>
+    </header>
+
+    <!-- Лента сообщений с doodle-фоном Telegram -->
+    <div class="messages-container" id="messagesContainer">
+      <div class="date-badge">Сегодня</div>
+
+      <div class="message-bubble message-in">
+        <div class="message-text">
+          👋 Привет! Я — <strong>SLUGA_bot</strong>, автономный инженерный агент.
+          <br><br>
+          ⚡ Нажмите синюю кнопку <strong>«Меню»</strong> внизу слева для быстрого доступа к командам, смене моделей <strong>LiteAI</strong> и настройкам.
+          <br><br>
+          📎 <strong>Скрепка</strong>: отправляйте любые файлы, скриншоты (<code>Ctrl+V</code>) или код для аудита.
+          <br>🎙️ <strong>Микрофон</strong>: голосовой ввод с мгновенным распознаванием.
+        </div>
+        <div class="message-meta">
+          <span id="welcomeTime">12:00</span>
+          <span class="checkmarks">✓✓</span>
+        </div>
+      </div>
+
+      <!-- Индикатор печати / размышления -->
+      <div class="typing-indicator" id="typingIndicator" style="display: none;">
+        <span class="typing-text">SLUGA печатает...</span>
+      </div>
+    </div>
+
+    <!-- Всплывающее меню команд по кнопке «Меню» (1 в 1 со скрина) -->
+    <div class="telegram-command-popup" id="telegramCommandPopup">
+      <div class="command-popup-header">
+        <span>Команды бота</span>
+        <button class="btn-close-cmd" id="btnCloseCmdMenu">✕</button>
+      </div>
+      <div class="command-list">
+        <div class="command-item" data-cmd="/start">
+          <div class="cmd-icon">🤖</div>
+          <div class="cmd-info">
+            <span class="cmd-name">/start</span>
+            <span class="cmd-desc">Запустить бота и начать диалог</span>
+          </div>
+        </div>
+
+        <div class="command-item" data-cmd="/model">
+          <div class="cmd-icon">🧠</div>
+          <div class="cmd-info">
+            <span class="cmd-name">/model</span>
+            <span class="cmd-desc">Выбрать модель LiteAI (расход токенов)</span>
+          </div>
+        </div>
+
+        <div class="command-item" data-cmd="/new">
+          <div class="cmd-icon">📝</div>
+          <div class="cmd-info">
+            <span class="cmd-name">/new</span>
+            <span class="cmd-desc">Начать новый диалог с чистого листа</span>
+          </div>
+        </div>
+
+        <div class="command-item" data-cmd="/status">
+          <div class="cmd-icon">📊</div>
+          <div class="cmd-info">
+            <span class="cmd-name">/status</span>
+            <span class="cmd-desc">Текущая модель и статус системы</span>
+          </div>
+        </div>
+
+        <div class="command-item" data-cmd="/settings">
+          <div class="cmd-icon">⚙️</div>
+          <div class="cmd-info">
+            <span class="cmd-name">/settings</span>
+            <span class="cmd-desc">Настройки ключа LiteAI и защита</span>
+          </div>
+        </div>
+
+        <div class="command-item" data-cmd="/help">
+          <div class="cmd-icon">❓</div>
+          <div class="cmd-info">
+            <span class="cmd-name">/help</span>
+            <span class="cmd-desc">Справка и список возможностей</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Всплывающий Telegram Emoji Picker -->
+    <div class="telegram-emoji-popup" id="emojiPickerPopup">
+      <div class="emoji-popup-header">
+        <span>Смайлы и реакции</span>
+        <button class="btn-close-emoji" id="btnCloseEmojiPopup" type="button" title="Закрыть">✕</button>
+      </div>
+      <div class="emoji-tabs">
+        <button class="emoji-tab-btn active" data-cat="faces" type="button">😀 Смайлы</button>
+        <button class="emoji-tab-btn" data-cat="gestures" type="button">👍 Жесты</button>
+        <button class="emoji-tab-btn" data-cat="tech" type="button">🤖 ИИ/Код</button>
+        <button class="emoji-tab-btn" data-cat="symbols" type="button">🔥 Реакции</button>
+      </div>
+      <div class="emoji-grid" id="emojiGrid"></div>
+    </div>
+
+    <!-- Нижняя панель ввода Telegram (кнопка «Меню», скрепка, поле, эмодзи, микрофон) -->
+    <div class="input-panel">
+      <!-- Синяя кнопка «Меню» Telegram -->
+      <button class="tg-menu-btn" id="btnTgMenu">Меню</button>
+
+      <!-- Скрепка -->
+      <button class="tg-icon-btn btn-attach" id="btnAttach" title="Прикрепить файл или фото">📎</button>
+      <input type="file" id="fileInput" multiple style="display: none;">
+
+      <!-- Поле ввода с чипами прикрепленных файлов и голосовым HUD -->
+      <div class="tg-input-box-wrapper">
+        <div class="attachment-preview-bar" id="attachmentPreviewBar" style="display: none;"></div>
+        
+        <!-- Голосовой HUD записи -->
+        <div class="voice-recording-hud" id="voiceRecordingHud" style="display: none;">
+          <span class="recording-pulse-dot"></span>
+          <span class="recording-time-text" id="voiceRecordingDuration">0:00</span>
+          <span class="recording-live-text" id="voiceRecordingLiveText">Слушаю... Говорите</span>
+          <button type="button" class="btn-cancel-recording" id="btnCancelRecording" title="Отменить запись">✕ Отмена</button>
+        </div>
+
+        <textarea 
+          class="tg-message-textarea" 
+          id="messageInput" 
+          rows="1" 
+          placeholder="Сообщение вне темы..."
+        ></textarea>
+      </div>
+
+      <!-- Эмодзи -->
+      <button class="tg-icon-btn btn-emoji" id="btnEmoji" title="Смайлы">😊</button>
+
+      <!-- Микрофон / Кнопка отправки -->
+      <button class="tg-icon-btn btn-action-circle" id="btnAction" title="Голосовое сообщение">🎙️</button>
+    </div>
+
+  </main>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО: НАСТРОЙКИ & LITEAI КЛЮЧ -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>⚙️ Настройки SLUGA</h3>
+      <button class="btn-close-modal" id="btnCloseSettings">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label" for="settingServerUrl">Адрес WebSocket сервера</label>
+        <input type="text" class="form-input" id="settingServerUrl" placeholder="ws://localhost:8080/ws (или wss://домен/ws)">
+        <span class="form-hint">Оставьте пустым для автоматического подключения к текущему серверу</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="settingMasterToken">Токен связи с ботом (Bot Token)</label>
+        <input type="text" class="form-input" id="settingMasterToken" placeholder="sluga-XXXX-XXXXXX">
+        <span class="form-hint">Секретный токен сопряжения, выданный сервером SLUGA при установке</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="settingApiKey">LiteAI API Key (<a href="https://liteai.tech/docs" target="_blank" style="color: var(--tg-accent-blue);">liteai.tech</a>)</label>
+        <input type="password" class="form-input" id="settingApiKey" placeholder="sk-bf-...">
+        <span class="form-hint">Единый ключ формата sk-bf-... от сервиса LiteAI.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="settingModel">Модель ИИ (официальные LiteAI)</label>
+        <select class="form-select" id="settingModel">
+          <optgroup label="Anthropic Claude (LiteAI)">
+            <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6 (Оптимально для кода и архитектуры)</option>
+            <option value="claude-opus-4-8">Claude Opus 4.8 (Максимальная логика)</option>
+            <option value="claude-haiku-4-5">Claude Haiku 4.5 (Экономная / Сверхбыстрая)</option>
+          </optgroup>
+          <optgroup label="OpenAI GPT-5.x / GPT-4o">
+            <option value="gpt-5.6-sol">gpt-5.6-sol (Высокая скорость и точность)</option>
+            <option value="gpt-5.6-luna">gpt-5.6-luna (Универсальный интеллект)</option>
+            <option value="gpt-5.6-terra">gpt-5.6-terra (Большой контекст)</option>
+            <option value="openai/gpt-4o">GPT-4o (Мультимодальный)</option>
+          </optgroup>
+          <optgroup label="Открытые и экономные модели (Минимальный расход токенов)">
+            <option value="deepseek/deepseek-chat">DeepSeek V4 Flash (Минимальный расход)</option>
+            <option value="qwen/qwen-2.5-coder-32b-instruct">Qwen 3.7 Flash / Coder (Инженерия)</option>
+            <option value="glm-5.3-flash">GLM-5.3 Flash</option>
+            <option value="granite-4.2-8b">Granite 4.2 8B (IBM)</option>
+          </optgroup>
+        </select>
+        <span class="form-hint">Расход токенов зависит от модели: Haiku и DeepSeek расходуют минимум токенов, Sonnet и Opus — мощные для глубокого кода.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="settingPinCode">Защитный PIN-код (Защита при утере устройства)</label>
+        <input type="password" maxlength="6" class="form-input" id="settingPinCode" placeholder="Оставьте пустым, если не требуется">
+      </div>
+
+      <div class="form-group">
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tg-text-secondary); cursor: pointer;">
+          <input type="checkbox" id="settingVoiceAutoplay" checked>
+          Озвучивать ответы голосом (TTS)
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer" style="flex-direction: column; gap: 10px;">
+      <div style="display: flex; gap: 8px; width: 100%; align-items: center;">
+        <button class="btn-secondary" id="btnTestConnection" style="flex:1; background: #1a3a5c; border-color: #2b5278;" onclick="testSlugaConnection()">🔍 Проверить связь</button>
+      </div>
+      <p id="connectionTestResult" style="font-size: 12px; color: #8e8e93; margin: 0; min-height: 16px; text-align: center;"></p>
+      <div style="display: flex; gap: 8px; width: 100%;">
+        <button class="btn-secondary" id="btnCancelSettings" style="flex:1;">Отмена</button>
+        <button class="btn-primary" id="btnSaveSettings" style="flex:2;">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛЬНОЕ ОКНО: БЛОКИРОВКА PIN-КОДОМ -->
+<div class="modal-overlay" id="pinLockModal">
+  <div class="modal-card" style="width: 340px; text-align: center;">
+    <div class="modal-body" style="gap: 16px; padding: 28px 24px;">
+      <div style="font-size: 42px;">🔒</div>
+      <h3 style="color: var(--tg-text-primary); font-size: 18px;">Вход в SLUGA_bot</h3>
+      <p style="font-size: 13px; color: var(--tg-text-secondary);">Введите защитный PIN-код</p>
+      
+      <input type="password" maxlength="6" class="form-input" id="inputUnlockPin" placeholder="••••" style="text-align: center; font-size: 24px; letter-spacing: 8px;">
+      <p id="pinErrorMsg" style="color: #e53935; font-size: 12px; display: none;">Неверный PIN-код!</p>
+      
+      <button class="btn-primary" id="btnUnlockApp" style="width: 100%; margin-top: 8px;">Разблокировать</button>
+    </div>
+  </div>
+</div>
+
+<audio id="ttsAudioPlayer" style="display: none;"></audio>
+
+<script src="/js/websocket.js?v=2.1.0"></script>
+<script src="/js/voice.js?v=2.1.0"></script>
+<script src="/js/app.js?v=2.1.0"></script>
+
+</body>
+</html>
