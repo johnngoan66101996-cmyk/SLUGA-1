@@ -124,11 +124,37 @@ def cmd_test_ai():
     asyncio.run(_async_test_ai())
 
 
+def find_available_port(host: str, start_port: int, max_attempts: int = 50) -> int:
+    import socket
+    for p in range(start_port, start_port + max_attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind((host, p))
+                return p
+            except OSError:
+                continue
+    return start_port
+
+
 def cmd_start(host: str = None, port: int = None, reload: bool = False):
     """Запускает веб-сервер uvicorn."""
     import uvicorn
     h = host or settings.server_host
-    p = port or settings.server_port
+    desired_port = port or settings.server_port
+    p = find_available_port(h, desired_port)
+    if p != desired_port:
+        print(f"⚠️ Порт {desired_port} занят! Автоматически выбран свободный порт: {p}")
+        env_file = BASE_DIR / ".env"
+        if env_file.exists():
+            try:
+                import re
+                content = env_file.read_text(encoding="utf-8")
+                if "SERVER_PORT=" in content:
+                    content = re.sub(r"SERVER_PORT=\d+", f"SERVER_PORT={p}", content)
+                    env_file.write_text(content, encoding="utf-8")
+            except Exception:
+                pass
 
     print("=" * 60)
     print("🚀 ЗАПУСК БОЕВОГО СЕРВЕРА SLUGA")
