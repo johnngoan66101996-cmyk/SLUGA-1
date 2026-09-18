@@ -182,53 +182,34 @@ echo "   ✅ Установлена модель: $SELECTED_MODEL"
 echo ""
 
 # ------------------------------------------------------------------------------
-# ШАГ 5: Способ связи со SlugaGram (обход локальной сети)
+# ШАГ 5: Настройка домена (без портов, полностью автоматически)
 # ------------------------------------------------------------------------------
-echo "🔹 [ШАГ 5/6] Настройка канала связи со SlugaGram..."
+echo "🔹 [ШАГ 5/6] Настройка домена и публичного доступа..."
 SERVER_IP=$(curl -s --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}' || echo "IP_СЕРВЕРА")
 
-# Автопроверка наличия доменов и папок сайтов на хостинге SpaceWeb / Linux / Beget
-FOUND_DIRS=()
-# Стандартный поиск public_html
-while IFS= read -r -d '' dir; do
-    FOUND_DIRS+=("$dir")
-done < <(find "$HOME" -maxdepth 3 -type d -name "public_html" -print0 2>/dev/null || true)
-
-# Дополнительный поиск: $HOME/$USER_DOMAIN/www
-if [ -n "${USER_DOMAIN:-}" ]; then
-    for extra in "$HOME/$USER_DOMAIN/www" "$HOME/$USER_DOMAIN" "$HOME/domains/$USER_DOMAIN/public_html"; do
-        if [ -d "$extra" ]; then FOUND_DIRS+=("$extra"); fi
-    done
-fi
-
+echo "   🌐 Выберите способ подключения SlugaGram к вашему серверу:"
 SAVED_DOMAIN=$(grep -E "^SLUGA_DOMAIN=" .env 2>/dev/null | cut -d '=' -f2- || true)
 if [ -n "$SAVED_DOMAIN" ]; then
-    DOMAIN_LABEL="[1] Собственный домен ($SAVED_DOMAIN) через Reverse Proxy (.htaccess)"
+    echo "   [1] Собственный домен ($SAVED_DOMAIN) — через .htaccess+PHP [РЕКОМЕНДУЕТСЯ]"
 else
-    DOMAIN_LABEL="[1] Собственный домен через Reverse Proxy (.htaccess / Nginx)"
+    echo "   [1] Собственный домен — через .htaccess+PHP [РЕКОМЕНДУЕТСЯ]"
 fi
-
-echo "   🌐 Выберите способ подключения SlugaGram к вашему серверу:"
-echo "   $DOMAIN_LABEL [РЕКОМЕНДУЕТСЯ]"
 echo "   [2] Cloudflare Zero-Trust Tunnel (автоматический туннель без домена)"
-echo "   [3] Прямой IP (ws://${SERVER_IP}:8080/ws)"
+echo "   [3] Прямой IP (ws://${SERVER_IP}:8888/ws)"
 read -p "   Ваш выбор [по умолчанию 1]: " NET_CHOICE
 
 if [ -z "$NET_CHOICE" ] || [ "$NET_CHOICE" = "1" ]; then
-    USE_DOMAIN=true
-    USE_CF=false
+    USE_DOMAIN=true; USE_CF=false
 elif [ "$NET_CHOICE" = "2" ]; then
-    USE_CF=true
-    USE_DOMAIN=false
+    USE_CF=true; USE_DOMAIN=false
 else
-    USE_CF=false
-    USE_DOMAIN=false
-    USE_DIRECT_IP=true
+    USE_CF=false; USE_DOMAIN=false; USE_DIRECT_IP=true
 fi
 
-FINAL_CLIENT_URL="ws://${SERVER_IP}:8080/ws"
+SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8888)
+FINAL_CLIENT_URL="ws://${SERVER_IP}:${SRV_PORT}/ws"
 
-if [ "$USE_CF" = true ]; then
+if [ "${USE_CF:-false}" = true ]; then
     echo ""
     echo "   ⚡ Подготовка Cloudflare Zero-Trust Tunnel..."
     mkdir -p tools 2>/dev/null || true
@@ -239,42 +220,32 @@ if [ "$USE_CF" = true ]; then
     elif [[ "$ARCH" =~ "arm" ]] || [ "$ARCH" = "aarch64" ]; then
         CF_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
     fi
-
     if [ -n "$CF_URL" ] && [ ! -f "tools/cloudflared" ]; then
-        echo "   📥 Скачивание cloudflared в tools/cloudflared..."
+        echo "   📥 Скачивание cloudflared..."
         curl -L -s --max-time 45 "$CF_URL" -o tools/cloudflared 2>/dev/null || true
         chmod +x tools/cloudflared 2>/dev/null || true
     fi
-
-    cat << 'EOF' > start_tunnel.sh
+    cat > start_tunnel.sh << CFEOF
 #!/usr/bin/env bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-if [ -f "./tools/cloudflared" ]; then
-    exec ./tools/cloudflared tunnel --url http://127.0.0.1:8080
-else
-    exec cloudflared tunnel --url http://127.0.0.1:8080
-fi
-EOF
+SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+cd "\$SCRIPT_DIR"
+exec \$([ -f ./tools/cloudflared ] && echo ./tools/cloudflared || echo cloudflared) tunnel --url http://127.0.0.1:${SRV_PORT}
+CFEOF
     chmod +x start_tunnel.sh 2>/dev/null || true
-    echo "   ✅ Скрипт туннеля готов."
+    echo "   ✅ Скрипт туннеля готов. Запуск: bash start_tunnel.sh"
 
-elif [ "$USE_DOMAIN" = true ]; then
+elif [ "${USE_DOMAIN:-false}" = true ]; then
     echo ""
-    echo "   🌐 Настройка Reverse Proxy (.htaccess / Nginx)..."
-    SAVED_DOMAIN=$(grep -E "^SLUGA_DOMAIN=" .env 2>/dev/null | cut -d '=' -f2- || true)
+    echo "   🌐 Настройка домена и публичного доступа..."
+
     if [ -n "$SAVED_DOMAIN" ]; then
-        PROMPT_TEXT="   Введите имя вашего домена [по умолчанию: $SAVED_DOMAIN]: "
+        PROMPT_TEXT="   Введите имя домена [по умолчанию: $SAVED_DOMAIN]: "
     else
-        PROMPT_TEXT="   Введите имя вашего домена (например, mysite.ru): "
+        PROMPT_TEXT="   Введите имя домена (например, sugatov-it.ru): "
     fi
-
     read -p "$PROMPT_TEXT" USER_DOMAIN
-    if [ -z "$USER_DOMAIN" ]; then
-        USER_DOMAIN="${SAVED_DOMAIN:-ваш-домен.ru}"
-    fi
+    [ -z "$USER_DOMAIN" ] && USER_DOMAIN="${SAVED_DOMAIN:-ваш-домен.ru}"
 
-    # Зачищаем домен от любых префиксов через Python (надёжнее sed на любом хостинге)
     USER_DOMAIN=$(python3 -c "
 import re, sys
 d = sys.argv[1].strip()
@@ -285,75 +256,156 @@ print(d)
 
     echo "   ✅ Домен принят: $USER_DOMAIN"
 
-    # Сохраняем домен в .env
     if grep -q "^SLUGA_DOMAIN=" .env 2>/dev/null; then
         sed -i "s|^SLUGA_DOMAIN=.*|SLUGA_DOMAIN=$USER_DOMAIN|" .env
     else
         echo "SLUGA_DOMAIN=$USER_DOMAIN" >> .env
     fi
 
-    # Добавляем SERVER_DOMAIN в .env если отсутствует (устаревший ключ для обратной совместимости)
-    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8888)
-    # Обновляем SERVER_PORT на 8888 если он всё ещё равен проблемному 8080
     if [ "$SRV_PORT" = "8080" ]; then
-        sed -i 's|^SERVER_PORT=8080|SERVER_PORT=8888|' .env 2>/dev/null || true
+        sed -i 's|SERVER_PORT=8080|SERVER_PORT=8888|' .env 2>/dev/null || true
         SRV_PORT=8888
-        echo "   ⚠️  Порт 8080 занят системой хостинга — автоматически изменён на $SRV_PORT"
+        echo "   ⚠️  Порт 8080 занят хостингом — изменён на $SRV_PORT"
     fi
 
-    HTACCESS_CONTENT="<IfModule mod_rewrite.c>
-RewriteEngine On
-
-# SLUGA Reverse Proxy — не редактировать вручную!
-# 1. WebSocket
-RewriteCond %{HTTP:Upgrade} =websocket [NC]
-RewriteRule ^ws(.*) ws://127.0.0.1:${SRV_PORT}/ws\$1 [P,L]
-
-# 2. Health-check
-RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-RewriteRule ^health(.*) http://127.0.0.1:${SRV_PORT}/health\$1 [P,L]
-
-# 3. REST API
-RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-RewriteRule ^api/(.*) http://127.0.0.1:${SRV_PORT}/api/\$1 [P,L]
-</IfModule>"
-
-    # Записываем .htaccess в проект
-    printf '%s\n' "$HTACCESS_CONTENT" > .htaccess
-    echo "   ✅ .htaccess создан в: $(pwd)/.htaccess"
-
-    # Ищем все возможные корни сайта SpaceWeb/Beget и копируем туда
-    HTACCESS_TARGETS=("$HOME")
-    for _candidate in \
+    # ============================================================
+    # АВТОПОИСК И СОЗДАНИЕ WEBROOT (папки сайта)
+    # ============================================================
+    echo "   🔍 Поиск папки сайта на хостинге..."
+    WEBROOT=""
+    for candidate in \
         "$HOME/${USER_DOMAIN}/public_html" \
         "$HOME/${USER_DOMAIN}/www" \
         "$HOME/${USER_DOMAIN}" \
+        "$HOME/domains/${USER_DOMAIN}/public_html" \
         "$HOME/public_html" \
         "$HOME/www" \
         "$HOME/web" \
         "$HOME/htdocs"; do
-        [ -d "$_candidate" ] && HTACCESS_TARGETS+=("$_candidate")
-    done
-    for _dir in "${FOUND_DIRS[@]}"; do HTACCESS_TARGETS+=("$_dir"); done
-
-    for _target in "${HTACCESS_TARGETS[@]}"; do
-        if [ -w "$_target" ]; then
-            printf '%s\n' "$HTACCESS_CONTENT" > "$_target/.htaccess"
-            echo "   🚀 .htaccess скопирован в: $_target/.htaccess"
+        if [ -d "$candidate" ]; then
+            WEBROOT="$candidate"
+            echo "   ✅ Найдена папка сайта: $WEBROOT"
+            break
         fi
     done
 
+    if [ -z "$WEBROOT" ]; then
+        FOUND=$(find "$HOME" -maxdepth 4 -type d \( -name "public_html" -o -name "www" \) 2>/dev/null | head -1)
+        if [ -n "$FOUND" ]; then
+            WEBROOT="$FOUND"
+            echo "   ✅ Найдена папка сайта (find): $WEBROOT"
+        fi
+    fi
+
+    if [ -z "$WEBROOT" ]; then
+        WEBROOT="$HOME/${USER_DOMAIN}"
+        mkdir -p "$WEBROOT"
+        echo "   ✅ Создана папка сайта: $WEBROOT"
+    fi
+
+    # ============================================================
+    # PHP-ПРОКСИ — работает на любом хостинге без mod_proxy
+    # ============================================================
+    echo "   📝 Установка PHP-прокси..."
+    PHP_PORT="${SRV_PORT}"
+    cat > "$WEBROOT/sluga.php" << PHPEOF
+<?php
+/**
+ * SLUGA HTTP Proxy
+ * Проксирует HTTP-запросы от Apache к uvicorn на порту ${PHP_PORT}.
+ * Не удалять!
+ */
+\$port = ${PHP_PORT};
+\$path = isset(\$_SERVER['PATH_INFO']) ? \$_SERVER['PATH_INFO'] : '/';
+if (empty(\$path) || \$path === '/sluga.php') \$path = '/';
+\$query = !empty(\$_SERVER['QUERY_STRING']) ? '?' . \$_SERVER['QUERY_STRING'] : '';
+\$target = "http://127.0.0.1:{\$port}{\$path}{\$query}";
+\$method = \$_SERVER['REQUEST_METHOD'];
+\$body = file_get_contents('php://input');
+\$headers = [];
+foreach (\$_SERVER as \$k => \$v) {
+    if (strncmp(\$k, 'HTTP_', 5) === 0 && \$k !== 'HTTP_HOST') {
+        \$name = str_replace('_', '-', substr(\$k, 5));
+        \$headers[] = "\$name: \$v";
+    }
+}
+if (!empty(\$_SERVER['CONTENT_TYPE'])) \$headers[] = 'Content-Type: ' . \$_SERVER['CONTENT_TYPE'];
+\$ch = curl_init(\$target);
+curl_setopt_array(\$ch, [
+    CURLOPT_CUSTOMREQUEST  => \$method,
+    CURLOPT_POSTFIELDS     => \$body,
+    CURLOPT_HTTPHEADER     => \$headers,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HEADER         => true,
+    CURLOPT_TIMEOUT        => 30,
+    CURLOPT_CONNECTTIMEOUT => 5,
+]);
+\$resp = curl_exec(\$ch);
+\$errno = curl_errno(\$ch);
+\$http_code = curl_getinfo(\$ch, CURLINFO_HTTP_CODE);
+\$hsize = curl_getinfo(\$ch, CURLINFO_HEADER_SIZE);
+curl_close(\$ch);
+if (\$errno || \$resp === false) {
+    http_response_code(502);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'SLUGA недоступен. Проверьте: tail -f ~/SLUGA-1/sluga_server.log']);
+    exit;
+}
+\$resp_headers = substr(\$resp, 0, \$hsize);
+\$resp_body    = substr(\$resp, \$hsize);
+http_response_code(\$http_code);
+foreach (explode("\r\n", \$resp_headers) as \$hline) {
+    if (preg_match('/^(Content-Type|Content-Length|X-[^:]+):/i', \$hline)) header(\$hline);
+}
+echo \$resp_body;
+PHPEOF
+
+    # ============================================================
+    # .htaccess — WebSocket mod_proxy + PHP fallback для HTTP
+    # ============================================================
+    cat > "$WEBROOT/.htaccess" << HTEOF
+# SLUGA Reverse Proxy
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /
+
+# 1. WebSocket — через mod_proxy (если включен на хостинге)
+RewriteCond %{HTTP:Upgrade} =websocket [NC]
+RewriteRule ^ws(.*) ws://127.0.0.1:${SRV_PORT}/ws\$1 [P,L]
+
+# 2. Статические файлы — не трогаем
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# 3. /health -> PHP-прокси
+RewriteRule ^health$ sluga.php [L,QSA,E=PATH_INFO:/health]
+
+# 4. /api/* -> PHP-прокси
+RewriteRule ^api/(.*)$ sluga.php [L,QSA,E=PATH_INFO:/api/\$1]
+
+# 5. / (главная) -> PHP-прокси
+RewriteRule ^$ sluga.php [L,QSA,E=PATH_INFO:/]
+</IfModule>
+HTEOF
+
+    echo "   ✅ .htaccess и PHP-прокси установлены в: $WEBROOT"
+
+    # Копируем в HOME если webroot не HOME
+    if [ "$WEBROOT" != "$HOME" ] && [ -w "$HOME" ]; then
+        cp "$WEBROOT/.htaccess" "$HOME/.htaccess" 2>/dev/null || true
+        cp "$WEBROOT/sluga.php" "$HOME/sluga.php" 2>/dev/null || true
+        echo "   🚀 Скопировано также в: $HOME"
+    fi
+
     FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
+
 else
-    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8888)
     echo "   ✅ Выбран прямой IP: ws://${SERVER_IP}:${SRV_PORT}/ws"
     FINAL_CLIENT_URL="ws://${SERVER_IP}:${SRV_PORT}/ws"
 fi
-
-# ------------------------------------------------------------------------------
-# ШАГ 6: Запуск сервера и фонового режима
-# ------------------------------------------------------------------------------
-echo ""
 echo "🔹 [ШАГ 6/6] Запуск серверного агента..."
 
 # Запуск без sudo (nohup background daemon)
