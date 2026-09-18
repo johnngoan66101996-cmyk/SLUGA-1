@@ -124,43 +124,54 @@ def cmd_test_ai():
     asyncio.run(_async_test_ai())
 
 
-def find_available_port(host: str, start_port: int, max_attempts: int = 50) -> int:
-    import socket
-    for p in range(start_port, start_port + max_attempts):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                s.bind((host, p))
-                return p
-            except OSError:
-                continue
-    return start_port
-
 
 def cmd_start(host: str = None, port: int = None, reload: bool = False):
-    """Запускает веб-сервер uvicorn."""
+    """Запускает веб-сервер uvicorn.
+
+    ВАЖНО: В режиме работы через домен (Reverse Proxy / .htaccess) порт
+    ВСЕГДА должен совпадать с тем, что прописан в .htaccess.
+    По умолчанию: SERVER_PORT=8080 в .env — меняйте только оба сразу.
+    """
+    import socket
     import uvicorn
+
     h = host or settings.server_host
-    desired_port = port or settings.server_port
-    p = find_available_port(h, desired_port)
-    if p != desired_port:
-        print(f"⚠️ Порт {desired_port} занят! Автоматически выбран свободный порт: {p}")
-        env_file = BASE_DIR / ".env"
-        if env_file.exists():
-            try:
-                import re
-                content = env_file.read_text(encoding="utf-8")
-                if "SERVER_PORT=" in content:
-                    content = re.sub(r"SERVER_PORT=\d+", f"SERVER_PORT={p}", content)
-                    env_file.write_text(content, encoding="utf-8")
-            except Exception:
-                pass
+    p = port or settings.server_port
+
+    # Жёсткая проверка: порт занят — сообщаем и выходим, не прыгаем на другой!
+    # (авто-перебор портов несовместим с Reverse Proxy / .htaccess-конфигом)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as _chk:
+        _chk.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            _chk.bind((h, p))
+        except OSError:
+            print("=" * 60)
+            print(f"❌ ПОРТ {p} УЖЕ ЗАНЯТ — СЕРВЕР НЕ МОЖЕТ ЗАПУСТИТЬСЯ!")
+            print("")
+            print("Возможные причины и решения:")
+            print(f"  1. Уже запущен другой экземпляр SLUGA:")
+            print(f"     pkill -f 'main.py start'  && sleep 2 && python main.py start")
+            print(f"  2. Порт {p} занят системным процессом хостинга:")
+            print(f"     fuser -k {p}/tcp && python main.py start")
+            print(f"  3. Сменить порт (обновить SERVER_PORT в .env И порт в .htaccess).")
+            print("=" * 60)
+            sys.exit(1)
+
+    # Определяем URL для вывода (с учётом домена из .env)
+    sluga_domain = getattr(settings, 'sluga_domain', None)
+    if sluga_domain:
+        ws_public = f"wss://{sluga_domain}/ws"
+        http_public = f"https://{sluga_domain}"
+    else:
+        ws_public = f"ws://{h}:{p}/ws"
+        http_public = f"http://{h}:{p}"
 
     print("=" * 60)
     print("🚀 ЗАПУСК БОЕВОГО СЕРВЕРА SLUGA")
-    print(f"• Слушаем адрес   : http://{h}:{p}")
-    print(f"• WebSocket канал : ws://{h}:{p}/ws?token={settings.sluga_bot_token}")
-    print(f"• Модель по умолч.: {settings.liteai_model}")
+    print(f"• Слушаем локально : http://{h}:{p}  (внутренний порт)")
+    print(f"• Публичный WS URL : {ws_public}?token={settings.sluga_bot_token}")
+    print(f"• Публичный API URL: {http_public}")
+    print(f"• Модель по умолч. : {settings.liteai_model}")
     print("=" * 60)
 
     uvicorn.run(
