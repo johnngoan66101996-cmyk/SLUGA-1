@@ -273,6 +273,8 @@ elif [ "$USE_DOMAIN" = true ]; then
     if [ -z "$USER_DOMAIN" ]; then
         USER_DOMAIN="${SAVED_DOMAIN:-ваш-домен.ru}"
     fi
+    # Очищаем домен от префиксов http://, https://, wss://, ws://, путей и пробелов
+    USER_DOMAIN=$(echo "$USER_DOMAIN" | sed -E 's|^https?://||; s|^wss?://||; s|/.*$||' | tr -d ' ')
 
     # Сохраняем домен в локальный .env пользователя
     if grep -q "^SLUGA_DOMAIN=" .env 2>/dev/null; then
@@ -281,16 +283,21 @@ elif [ "$USE_DOMAIN" = true ]; then
         echo "SLUGA_DOMAIN=$USER_DOMAIN" >> .env
     fi
 
+    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8080)
     HTACCESS_CONTENT="<IfModule mod_rewrite.c>
 RewriteEngine On
 
 # 1. Проксирование WebSocket соединения SlugaGram
 RewriteCond %{HTTP:Upgrade} =websocket [NC]
-RewriteRule ^ws(.*) ws://127.0.0.1:8080/ws$1 [P,L]
+RewriteRule ^ws(.*) ws://127.0.0.1:${SRV_PORT}/ws$1 [P,L]
 
-# 2. Проксирование REST API и синтеза речи
+# 2. Проксирование проверки доступности /health
 RewriteCond %{HTTP:Upgrade} !=websocket [NC]
-RewriteRule ^api/(.*) http://127.0.0.1:8080/api/$1 [P,L]
+RewriteRule ^health(.*) http://127.0.0.1:${SRV_PORT}/health$1 [P,L]
+
+# 3. Проксирование REST API и синтеза речи
+RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+RewriteRule ^api/(.*) http://127.0.0.1:${SRV_PORT}/api/$1 [P,L]
 </IfModule>"
 
     # 1. Сохраняем в папке проекта
@@ -326,7 +333,12 @@ echo "🔹 [ШАГ 6/6] Запуск серверного агента..."
 # Запуск без sudo (nohup background daemon)
 read -p "   Запустить сервер в фоновом режиме прямо сейчас? [Y/n]: " RUN_BG
 if [[ ! "$RUN_BG" =~ ^[Nn]$ ]]; then
-    pkill -f "main.py start" 2>/dev/null || true
+    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8080)
+    # Освобождаем порт перед запуском
+    fuser -k ${SRV_PORT}/tcp 2>/dev/null || true
+    pkill -9 -f "main.py" 2>/dev/null || true
+    sleep 1
+
     nohup $PYTHON_BIN main.py start > sluga_server.log 2>&1 &
     SERVER_PID=$!
     # Защита от SIGHUP при выходе из SSH
@@ -336,7 +348,6 @@ if [[ ! "$RUN_BG" =~ ^[Nn]$ ]]; then
 
     # Надежная проверка готовности через /health (цикл до 15с)
     echo "   ⏳ Ожидание готовности сервера..."
-    SRV_PORT=$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2 || echo 8080)
     SERVER_READY=false
     for i in {1..15}; do
         sleep 1

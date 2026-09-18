@@ -810,7 +810,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnSaveSettings.addEventListener('click', () => {
     const inputUrl = document.getElementById('settingServerUrl');
-    if (inputUrl) state.settings.serverUrl = inputUrl.value.trim();
+    let sUrl = inputUrl ? inputUrl.value.trim() : '';
+    if (sUrl) {
+      sUrl = sUrl.replace(/^wss?:\/\/https?:\/\//i, 'wss://')
+                 .replace(/^http:\/\//i, 'ws://')
+                 .replace(/^https:\/\//i, 'wss://');
+      if (!/^wss?:\/\//i.test(sUrl)) {
+        sUrl = 'wss://' + sUrl;
+      }
+      if (!sUrl.endsWith('/ws')) {
+        sUrl = sUrl.replace(/\/+$/, '') + '/ws';
+      }
+      if (inputUrl) inputUrl.value = sUrl;
+    }
+    state.settings.serverUrl = sUrl;
+
     const inputToken = document.getElementById('settingMasterToken');
     if (inputToken) state.settings.masterToken = inputToken.value.trim();
 
@@ -846,7 +860,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const testResultEl = document.getElementById('connectionTestResult');
     const inputUrl = document.getElementById('settingServerUrl');
     const inputToken = document.getElementById('settingMasterToken');
-    const wsUrl = (urlOverride || (inputUrl ? inputUrl.value : '') || state.settings.serverUrl || '').trim();
+    let wsUrl = (urlOverride || (inputUrl ? inputUrl.value : '') || state.settings.serverUrl || '').trim();
     const token = (tokenOverride || (inputToken ? inputToken.value : '') || state.settings.masterToken || '').trim();
 
     if (!testResultEl) return;
@@ -856,11 +870,25 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Автоматическая нормализация (исправляет wss://https://... и опечатки протокола)
+    wsUrl = wsUrl.replace(/^wss?:\/\/https?:\/\//i, 'wss://')
+                 .replace(/^http:\/\//i, 'ws://')
+                 .replace(/^https:\/\//i, 'wss://');
+    if (!/^wss?:\/\//i.test(wsUrl)) {
+      wsUrl = 'wss://' + wsUrl;
+    }
+    if (!wsUrl.endsWith('/ws')) {
+      wsUrl = wsUrl.replace(/\/+$/, '') + '/ws';
+    }
+    if (inputUrl) inputUrl.value = wsUrl;
+
     testResultEl.textContent = '⏱️ Проверяю подключение...';
     testResultEl.style.color = '#aaa';
 
     // Сначала проверяем HTTP /health
-    const httpUrl = wsUrl.replace(/^wss?:\/\//, (p) => p.startsWith('wss') ? 'https://' : 'http://').replace('/ws', '') + '/health';
+    const httpUrl = wsUrl.replace(/^ws:\/\//i, 'http://')
+                         .replace(/^wss:\/\//i, 'https://')
+                         .replace(/\/ws$/i, '') + '/health';
     try {
       const resp = await fetch(httpUrl, { signal: AbortSignal.timeout(5000) });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
