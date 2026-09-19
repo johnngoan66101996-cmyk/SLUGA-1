@@ -100,6 +100,23 @@ async def health_check():
     return JSONResponse({"ok": True, "service": "SLUGA AI Server", "model": settings.liteai_model})
 
 
+@app.get("/api/info")
+async def server_info():
+    """
+    Публичный эндпойнт (без токена) — возвращает базовую информацию о сервере.
+    Используется на экране pair_screen для проверки доступности сервера перед вводом Bot Token.
+    """
+    import time
+    return JSONResponse({
+        "ok": True,
+        "name": "SLUGA AI Server",
+        "version": "1.0.0",
+        "model": settings.liteai_model,
+        "auth_required": True,
+        "timestamp": int(time.time())
+    })
+
+
 @app.get("/api/status")
 async def get_status():
     """Статус сервера и активная модель LiteAI."""
@@ -191,8 +208,19 @@ async def websocket_endpoint(
     try:
         while True:
             raw_data = await websocket.receive_text()
+
+            # Heartbeat: клиент шлёт {"action": "ping"} — отвечаем pong
+            if raw_data.strip() == 'ping' or raw_data.strip() == '{"action":"ping"}':
+                await manager.send_json(websocket, {"event": "pong", "ts": __import__('time').time()})
+                continue
+
             data = json.loads(raw_data)
             action = data.get("action") or data.get("type")
+
+            # Явный ping через JSON
+            if action == "ping":
+                await manager.send_json(websocket, {"event": "pong", "ts": __import__('time').time()})
+                continue
 
             # Обновление динамических настроек сессии
             if data.get("api_key"):

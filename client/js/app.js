@@ -1,108 +1,344 @@
 /**
- * SLUGA Telegram Messenger — Main Application Controller
- * Реализует логику мессенджера: чаты, скрепку, drag&drop, буфер обмена, блоки кода, TTS
+ * SLUGA Telegram Messenger — Main Application Controller v2.0
+ * ONE-SHOT PAIRING: pair_screen (1 раз) → unlock (PIN) → chat
  */
 
 document.addEventListener('DOMContentLoaded', () => {
   // --- Состояние приложения ---
   const state = {
     currentSessionId: 'sluga_core',
-    pendingAttachments: [], // [{ name, size, type, file, serverPath }]
+    pendingAttachments: [],
     isRecordingVoice: false,
-    settings: {
-      serverUrl: localStorage.getItem('sluga_server_url') || '',
-      masterToken: localStorage.getItem('sluga_master_token') || '',
-      apiKey: localStorage.getItem('sluga_api_key') || '',
-      model: localStorage.getItem('sluga_model') || 'claude-sonnet-4-6',
-      pinCode: localStorage.getItem('sluga_pin_code') || '',
-      voiceAutoplay: localStorage.getItem('sluga_voice_autoplay') !== 'false'
+    settings: window.SlugaStorage ? window.SlugaStorage.getSettings() : {
+      serverUrl: '', botToken: '', model: 'claude-sonnet-4-6',
+      voiceAutoplay: true, pinCode: '', isPaired: false
     }
   };
 
   // --- Элементы интерфейса ---
-  const appContainer = document.getElementById('appContainer');
+  const appContainer      = document.getElementById('appContainer');
   const messagesContainer = document.getElementById('messagesContainer');
-  const typingIndicator = document.getElementById('typingIndicator');
-  const messageInput = document.getElementById('messageInput');
-  const btnAction = document.getElementById('btnAction');
-  const btnAttach = document.getElementById('btnAttach');
-  const fileInput = document.getElementById('fileInput');
+  const typingIndicator   = document.getElementById('typingIndicator');
+  const messageInput      = document.getElementById('messageInput');
+  const btnAction         = document.getElementById('btnAction');
+  const btnAttach         = document.getElementById('btnAttach');
+  const fileInput         = document.getElementById('fileInput');
   const attachmentPreviewBar = document.getElementById('attachmentPreviewBar');
-  const headerTitle = document.getElementById('headerTitle');
-  const headerAvatar = document.getElementById('headerAvatar');
-  const headerStatus = document.getElementById('headerStatus');
-  const btnTopMenu = document.getElementById('btnTopMenu');
-  const btnTgMenu = document.getElementById('btnTgMenu');
+  const headerTitle       = document.getElementById('headerTitle');
+  const headerAvatar      = document.getElementById('headerAvatar');
+  const headerStatus      = document.getElementById('headerStatus');
+  const connDot           = document.getElementById('connDot');
+  const btnTopMenu        = document.getElementById('btnTopMenu');
+  const btnTgMenu         = document.getElementById('btnTgMenu');
   const telegramCommandPopup = document.getElementById('telegramCommandPopup');
-  const btnCloseCmdMenu = document.getElementById('btnCloseCmdMenu');
-  const settingsModal = document.getElementById('settingsModal');
-  const btnCloseSettings = document.getElementById('btnCloseSettings');
+  const btnCloseCmdMenu   = document.getElementById('btnCloseCmdMenu');
+  const settingsModal     = document.getElementById('settingsModal');
+  const btnCloseSettings  = document.getElementById('btnCloseSettings');
   const btnCancelSettings = document.getElementById('btnCancelSettings');
-  const btnSaveSettings = document.getElementById('btnSaveSettings');
-  const pinLockModal = document.getElementById('pinLockModal');
-  const inputUnlockPin = document.getElementById('inputUnlockPin');
-  const btnUnlockApp = document.getElementById('btnUnlockApp');
-  const pinErrorMsg = document.getElementById('pinErrorMsg');
+  const btnSaveSettings   = document.getElementById('btnSaveSettings');
+  const pinLockModal      = document.getElementById('pinLockModal');
+  const inputUnlockPin    = document.getElementById('inputUnlockPin');
+  const btnUnlockApp      = document.getElementById('btnUnlockApp');
+  const pinErrorMsg       = document.getElementById('pinErrorMsg');
+  const pinLockServerUrl  = document.getElementById('pinLockServerUrl');
+  const btnChangeServer   = document.getElementById('btnChangeServer');
 
-  // --- Инстансы сокетов и голоса ---
+  // --- PAIR SCREEN элементы ---
+  const pairOverlay     = document.getElementById('pairScreenOverlay');
+  const pairServerUrl   = document.getElementById('pairServerUrl');
+  const pairBtnCheck    = document.getElementById('pairBtnCheck');
+  const pairServerStatus = document.getElementById('pairServerStatus');
+  const pairBotToken    = document.getElementById('pairBotToken');
+  const pairEnablePin   = document.getElementById('pairEnablePin');
+  const pairPinWrap     = document.getElementById('pairPinWrap');
+  const pairPinInput    = document.getElementById('pairPinInput');
+  const pairBtnConnect  = document.getElementById('pairBtnConnect');
+  const pairError       = document.getElementById('pairError');
+
+  // --- Инстансы ---
   const wsClient = new SlugaWebSocketClient();
   const voiceManager = new SlugaVoiceManager();
 
-  // --- 1. Проверка защитного PIN-кода (экран блокировки) ---
-  if (state.settings.pinCode) {
-    pinLockModal.classList.add('active');
-    inputUnlockPin.focus();
+  // =========================================================
+  // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ СТАТУС-БАРА
+  // =========================================================
+  function setStatus(text, mode = 'idle') {
+    // mode: 'online' | 'offline' | 'pairing' | 'idle'
+    if (headerStatus) headerStatus.textContent = text;
+    if (connDot) {
+      connDot.className = 'conn-dot';
+      if (mode !== 'idle') connDot.classList.add(mode);
+    }
+    if (headerStatus) {
+      const colors = { online: '#4fae4e', offline: '#e53935', pairing: '#ff9800', idle: '#7f91a4' };
+      headerStatus.style.color = colors[mode] || '#7f91a4';
+    }
+  }
 
-    const checkPin = () => {
-      if (inputUnlockPin.value === state.settings.pinCode) {
-        pinLockModal.classList.remove('active');
-        pinErrorMsg.style.display = 'none';
-        inputUnlockPin.value = '';
-      } else {
-        pinErrorMsg.style.display = 'block';
-        inputUnlockPin.value = '';
-        inputUnlockPin.focus();
-      }
-    };
+  // =========================================================
+  // ЛОГИКА ЗАПУСКА: pair → unlock → chat
+  // =========================================================
 
-    btnUnlockApp.addEventListener('click', checkPin);
-    inputUnlockPin.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') checkPin();
+  function showPairScreen() {
+    if (pairOverlay) {
+      pairOverlay.classList.add('active');
+      // Скрываем PIN-окно, если оно видимо
+      if (pinLockModal) pinLockModal.classList.remove('active');
+      setTimeout(() => pairServerUrl && pairServerUrl.focus(), 100);
+    }
+  }
+
+  function hidePairScreen() {
+    if (pairOverlay) pairOverlay.classList.remove('active');
+  }
+
+  function showUnlockScreen() {
+    if (pinLockModal) {
+      // Показываем адрес сервера в экране разблокировки
+      const rawUrl = state.settings.serverUrl || '';
+      const displayUrl = rawUrl.replace(/^wss?:\/\//, '').replace(/\/ws$/, '');
+      if (pinLockServerUrl) pinLockServerUrl.textContent = displayUrl ? `📡 ${displayUrl}` : '';
+      pinLockModal.classList.add('active');
+      if (inputUnlockPin) { inputUnlockPin.value = ''; inputUnlockPin.focus(); }
+    }
+  }
+
+  function startApp() {
+    hidePairScreen();
+    if (pinLockModal) pinLockModal.classList.remove('active');
+    initWebSocket();
+  }
+
+  // Определяем путь входа
+  const hasPaired = state.settings.isPaired &&
+                    state.settings.serverUrl &&
+                    state.settings.botToken;
+
+  if (!hasPaired) {
+    // ПЕРВЫЙ ЗАПУСК — показываем pair_screen
+    showPairScreen();
+  } else if (state.settings.pinCode) {
+    // ПОВТОРНЫЙ ЗАПУСК с PIN — показываем unlock
+    showUnlockScreen();
+  } else {
+    // ПОВТОРНЫЙ ЗАПУСК без PIN — мгновенный вход
+    startApp();
+  }
+
+  // =========================================================
+  // PAIR SCREEN: логика
+  // =========================================================
+
+  // Активируем кнопку подключения при наличии данных в обоих полях
+  function validatePairForm() {
+    const hasUrl   = (pairServerUrl?.value || '').trim().length > 3;
+    const hasToken = (pairBotToken?.value || '').trim().length > 3;
+    if (pairBtnConnect) pairBtnConnect.disabled = !(hasUrl && hasToken);
+  }
+  if (pairServerUrl) pairServerUrl.addEventListener('input', validatePairForm);
+  if (pairBotToken)  pairBotToken.addEventListener('input', validatePairForm);
+
+  // PIN toggle
+  if (pairEnablePin) {
+    pairEnablePin.addEventListener('change', () => {
+      if (pairPinWrap) pairPinWrap.classList.toggle('visible', pairEnablePin.checked);
+      if (pairEnablePin.checked && pairPinInput) pairPinInput.focus();
     });
   }
 
-  // --- 2. Инициализация WebSocket ---
+  // Кнопка «Проверить» — делаем GET /api/info без токена
+  if (pairBtnCheck) {
+    pairBtnCheck.addEventListener('click', async () => {
+      const rawUrl = (pairServerUrl?.value || '').trim();
+      if (!rawUrl) return;
+      const wsUrl = SlugaWebSocketClient.normalizeUrl(rawUrl);
+      // Преобразуем ws:// → http:// для fetch
+      const httpUrl = wsUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://')
+                           .replace(/\/ws$/, '/api/info');
+      pairBtnCheck.disabled = true;
+      if (pairServerStatus) { pairServerStatus.textContent = '⏳ проверка...'; pairServerStatus.style.color = '#ff9800'; }
+      try {
+        const resp = await fetch(httpUrl, { signal: AbortSignal.timeout(5000) });
+        const json = await resp.json();
+        if (json.ok) {
+          if (pairServerStatus) {
+            pairServerStatus.textContent = `✅ ${json.name || 'SLUGA'} онлайн • ${json.model || ''}`;
+            pairServerStatus.style.color = '#4fae4e';
+          }
+        } else { throw new Error('bad response'); }
+      } catch (e) {
+        if (pairServerStatus) { pairServerStatus.textContent = '❌ Сервер недоступен. Проверьте адрес и порт.'; pairServerStatus.style.color = '#e53935'; }
+      } finally {
+        pairBtnCheck.disabled = false;
+      }
+    });
+  }
+
+  // Кнопка «Подключить и сохранить»
+  if (pairBtnConnect) {
+    pairBtnConnect.addEventListener('click', () => {
+      const rawUrl  = (pairServerUrl?.value || '').trim();
+      const token   = (pairBotToken?.value || '').trim();
+      const pinVal  = pairEnablePin?.checked ? (pairPinInput?.value || '').trim() : '';
+
+      if (!rawUrl || !token) {
+        if (pairError) { pairError.textContent = 'Заполните адрес сервера и Bot Token.'; pairError.style.display = 'block'; }
+        return;
+      }
+      const wsUrl = SlugaWebSocketClient.normalizeUrl(rawUrl);
+
+      // Сохраняем настройки
+      const newSettings = {
+        ...state.settings,
+        serverUrl: wsUrl,
+        botToken:  token,
+        pinCode:   pinVal,
+        isPaired:  true
+      };
+      state.settings = newSettings;
+      if (window.SlugaStorage) window.SlugaStorage.saveSettings(newSettings);
+
+      if (pairError) pairError.style.display = 'none';
+      pairBtnConnect.disabled = true;
+      pairBtnConnect.textContent = '⏳ подключение...';
+
+      // Пытаемся подключить
+      const testWs = new SlugaWebSocketClient();
+      let done = false;
+
+      const failTimeout = setTimeout(() => {
+        if (done) return;
+        done = true;
+        testWs.destroy();
+        if (pairError) { pairError.textContent = 'Сервер не ответил. Проверьте адрес, порт и Bot Token.'; pairError.style.display = 'block'; }
+        if (pairBtnConnect) { pairBtnConnect.disabled = false; pairBtnConnect.textContent = '🔗 Подключить и сохранить'; }
+      }, 7000);
+
+      testWs.on('authenticated', () => {
+        if (done) return;
+        done = true;
+        clearTimeout(failTimeout);
+        testWs.destroy();
+        hidePairScreen();
+        startApp();
+      });
+
+      testWs.on('error', () => {
+        if (done) return;
+        done = true;
+        clearTimeout(failTimeout);
+        testWs.destroy();
+        if (pairError) { pairError.textContent = 'Неверный Bot Token или ошибка подключения.'; pairError.style.display = 'block'; }
+        if (pairBtnConnect) { pairBtnConnect.disabled = false; pairBtnConnect.textContent = '🔗 Подключить и сохранить'; }
+      });
+
+      testWs.on('disconnect', (ev) => {
+        if (done) return;
+        done = true;
+        clearTimeout(failTimeout);
+        testWs.destroy();
+        const msg = (ev && ev.code === 4003)
+          ? 'Отклонено сервером: неверный Bot Token (код 4003 Forbidden).'
+          : 'Сервер разорвал соединение. Проверьте адрес и Bot Token.';
+        if (pairError) { pairError.textContent = msg; pairError.style.display = 'block'; }
+        if (pairBtnConnect) { pairBtnConnect.disabled = false; pairBtnConnect.textContent = '🔗 Подключить и сохранить'; }
+      });
+
+      testWs.connect(wsUrl, token);
+    });
+  }
+
+  // =========================================================
+  // UNLOCK SCREEN: PIN + кнопка «Сменить сервер»
+  // =========================================================
+
+  const checkPin = () => {
+    const entered = (inputUnlockPin?.value || '').trim();
+    if (entered === state.settings.pinCode) {
+      if (pinLockModal) pinLockModal.classList.remove('active');
+      if (pinErrorMsg) pinErrorMsg.style.display = 'none';
+      if (inputUnlockPin) inputUnlockPin.value = '';
+      initWebSocket();
+    } else {
+      if (pinErrorMsg) pinErrorMsg.style.display = 'block';
+      if (inputUnlockPin) { inputUnlockPin.value = ''; inputUnlockPin.focus(); }
+    }
+  };
+
+  if (btnUnlockApp) btnUnlockApp.addEventListener('click', checkPin);
+
+  // Авто-сабмит при вводе последней цифры PIN
+  if (inputUnlockPin) {
+    inputUnlockPin.addEventListener('input', () => {
+      const len = state.settings.pinCode ? state.settings.pinCode.length : 4;
+      if (inputUnlockPin.value.length >= len) checkPin();
+    });
+    inputUnlockPin.addEventListener('keydown', (e) => { if (e.key === 'Enter') checkPin(); });
+  }
+
+  // Кнопка «Сменить сервер» — сброс паринга, выход на pair_screen
+  if (btnChangeServer) {
+    btnChangeServer.addEventListener('click', () => {
+      // Сбрасываем isPaired, чтобы снова попасть на pair_screen
+      state.settings.isPaired = false;
+      if (window.SlugaStorage) window.SlugaStorage.saveSettings(state.settings);
+      wsClient.destroy();
+      showPairScreen();
+      // Предзаполняем поля текущими значениями для удобства
+      if (pairServerUrl) {
+        const cur = state.settings.serverUrl || '';
+        pairServerUrl.value = cur.replace(/^wss?:\/\//, '').replace(/\/ws$/, '');
+      }
+      if (pairBotToken) pairBotToken.value = state.settings.botToken || '';
+      validatePairForm();
+    });
+  }
+
+  // =========================================================
+  // WebSocket инициализация
+  // =========================================================
   const initWebSocket = () => {
-    headerStatus.textContent = 'подключение к серверу...';
-    wsClient.connect(state.settings.serverUrl, state.settings.masterToken);
+    const sUrl  = (state.settings.serverUrl || '').trim();
+    const token = (state.settings.botToken  || '').trim();
+    if (!sUrl || !token) {
+      setStatus('Нет настроек — войдите через паринг', 'pairing');
+      showPairScreen();
+      return;
+    }
+    setStatus('подключение к серверу...', 'pairing');
+    wsClient.connect(sUrl, token);
   };
 
   wsClient.on('connect', () => {
-    headerStatus.textContent = 'онлайн • защищенный WebSocket';
-    headerStatus.style.color = '#4fae4e';
+    setStatus('авторизация...', 'pairing');
   });
 
   wsClient.on('disconnect', () => {
-    headerStatus.textContent = 'переподключение...';
-    headerStatus.style.color = '#e53935';
+    setStatus('переподключение...', 'offline');
   });
 
-  // Обработчик успешной авторизации по токену
+  wsClient.on('reconnecting', ({ attempt, maxAttempts, delayMs }) => {
+    setStatus(`реконнект ${attempt}/${maxAttempts} (через ${Math.round(delayMs/1000)}с)`, 'offline');
+  });
+
   wsClient.on('authenticated', (payload) => {
-    const model = payload.model || payload.liteai_model || 'модель не определена';
-    headerStatus.textContent = `✅ онлайн • ${model}`;
-    headerStatus.style.color = '#4fae4e';
-    // Обновляем поле модели в форме настроек, если она открыта
-    const inputModel = document.getElementById('inputModel');
-    if (inputModel && !inputModel.value) inputModel.value = model;
-    // Скрываем индикатор теста, если он виден
+    const model = payload.model || payload.liteai_model || '';
+    setStatus(model ? `• ${model}` : 'онлайн', 'online');
     const testResultEl = document.getElementById('connectionTestResult');
     if (testResultEl) {
       testResultEl.textContent = `✅ Сервер онлайн! Токен принят. Модель: ${model}`;
       testResultEl.style.color = '#4fae4e';
     }
-    console.log('[WS] Авторизация успешна:', payload);
   });
+
+  wsClient.on('pong', ({ latencyMs }) => {
+    if (latencyMs !== null && latencyMs !== undefined) {
+      const info = wsClient.getConnectionInfo();
+      const model = info.model ? ` • ${info.model}` : '';
+      setStatus(`онлайн${model} • ${latencyMs}мс`, 'online');
+    }
+  });
+
 
   wsClient.on('status', (payload) => {
     if (payload.status === 'thinking') {
@@ -216,16 +452,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- 3. Кнопка «Меню» Telegram и выпадающий список команд (как на скрине) ---
   function openSettingsModal() {
-    const inputUrl = document.getElementById('settingServerUrl');
-    if (inputUrl) inputUrl.value = state.settings.serverUrl;
-    const inputToken = document.getElementById('settingMasterToken');
-    if (inputToken) inputToken.value = state.settings.masterToken;
-    document.getElementById('settingApiKey').value = state.settings.apiKey;
-    document.getElementById('settingModel').value = state.settings.model;
-    document.getElementById('settingPinCode').value = state.settings.pinCode;
-    document.getElementById('settingVoiceAutoplay').checked = state.settings.voiceAutoplay;
-    const testResultEl = document.getElementById('connectionTestResult');
-    if (testResultEl) testResultEl.textContent = '';
+    const sUrl = document.getElementById('settingServerUrl');
+    const bToken = document.getElementById('settingBotToken');
+    const sKey = document.getElementById('settingApiKey');
+    const sModel = document.getElementById('settingModel');
+    const sPin = document.getElementById('settingPinCode');
+    const sVoice = document.getElementById('settingVoiceAutoplay');
+
+    if (sUrl) sUrl.value = state.settings.serverUrl || '';
+    if (bToken) bToken.value = state.settings.botToken || state.settings.masterToken || '';
+    if (sKey) sKey.value = state.settings.apiKey || '';
+    if (sModel) sModel.value = state.settings.model || 'claude-sonnet-4.6';
+    if (sPin) sPin.value = state.settings.pinCode || '';
+    if (sVoice) sVoice.checked = state.settings.voiceAutoplay !== false;
+
     settingsModal.classList.add('active');
   }
 
@@ -563,21 +803,69 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- 8. Запись и отправка голосового сообщения ---
+  const inputPanel = document.querySelector('.input-panel');
   const voiceRecordingHud = document.getElementById('voiceRecordingHud');
   const voiceRecordingDuration = document.getElementById('voiceRecordingDuration');
   const voiceRecordingLiveText = document.getElementById('voiceRecordingLiveText');
   const btnCancelRecording = document.getElementById('btnCancelRecording');
+  const btnSendRecording = document.getElementById('btnSendRecording');
+
+  async function finishAndSendVoiceRecording() {
+    if (!state.isRecordingVoice) return;
+    state.isRecordingVoice = false;
+
+    if (inputPanel) inputPanel.classList.remove('recording-mode');
+    btnAction.classList.remove('recording');
+    btnAction.textContent = '🎙️';
+    if (voiceRecordingHud) voiceRecordingHud.style.display = 'none';
+    messageInput.style.display = 'block';
+    messageInput.focus();
+
+    const recordResult = await voiceManager.stopRecording();
+    if (recordResult && recordResult.base64) {
+      renderOutgoingVoice(recordResult.duration || 1);
+
+      // Отправка голосового на сервер
+      wsClient.send({
+        action: 'send_voice',
+        type: 'voice',
+        session_id: state.currentSessionId,
+        audio_base64: recordResult.base64,
+        mime_type: recordResult.mimeType,
+        api_key: state.settings.apiKey,
+        model: state.settings.model
+      });
+    } else if (recordResult && recordResult.liveTranscript) {
+      messageInput.value = recordResult.liveTranscript;
+      updateActionButton();
+      handleSendTextMessage();
+    }
+  }
+
+  function cancelVoiceRecording() {
+    if (!state.isRecordingVoice) return;
+    state.isRecordingVoice = false;
+    voiceManager.cancelRecording();
+
+    if (inputPanel) inputPanel.classList.remove('recording-mode');
+    btnAction.classList.remove('recording');
+    btnAction.textContent = '🎙️';
+    if (voiceRecordingHud) voiceRecordingHud.style.display = 'none';
+    messageInput.style.display = 'block';
+    messageInput.focus();
+  }
 
   if (btnCancelRecording) {
     btnCancelRecording.addEventListener('click', (e) => {
       e.stopPropagation();
-      voiceManager.cancelRecording();
-      state.isRecordingVoice = false;
-      btnAction.classList.remove('recording');
-      btnAction.textContent = '🎙️';
-      if (voiceRecordingHud) voiceRecordingHud.style.display = 'none';
-      messageInput.style.display = 'block';
-      messageInput.focus();
+      cancelVoiceRecording();
+    });
+  }
+
+  if (btnSendRecording) {
+    btnSendRecording.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await finishAndSendVoiceRecording();
     });
   }
 
@@ -600,38 +888,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (ok) {
         state.isRecordingVoice = true;
+        if (inputPanel) inputPanel.classList.add('recording-mode');
         btnAction.classList.add('recording');
         btnAction.textContent = '⏹️';
         if (voiceRecordingHud) voiceRecordingHud.style.display = 'flex';
         messageInput.style.display = 'none';
       }
     } else {
-      btnAction.classList.remove('recording');
-      btnAction.textContent = '🎙️';
-      state.isRecordingVoice = false;
-      if (voiceRecordingHud) voiceRecordingHud.style.display = 'none';
-      messageInput.style.display = 'block';
-      messageInput.focus();
-
-      const recordResult = await voiceManager.stopRecording();
-      if (recordResult && recordResult.base64) {
-        renderOutgoingVoice(recordResult.duration || 1);
-
-        // Отправка голосового на сервер
-        wsClient.send({
-          action: 'send_voice',
-          type: 'voice',
-          session_id: state.currentSessionId,
-          audio_base64: recordResult.base64,
-          mime_type: recordResult.mimeType,
-          api_key: state.settings.apiKey,
-          model: state.settings.model
-        });
-      } else if (recordResult && recordResult.liveTranscript) {
-        messageInput.value = recordResult.liveTranscript;
-        updateActionButton();
-        handleSendTextMessage();
-      }
+      await finishAndSendVoiceRecording();
     }
   }
 
@@ -644,7 +908,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   // --- 9. Рендеринг пузырей сообщений ---
-  function renderOutgoingMessage(text, attachments) {
+  function renderOutgoingMessage(text, attachments, isRestoring = false) {
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble message-out';
 
@@ -680,6 +944,15 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesContainer.insertBefore(bubble, typingIndicator);
     bindCopyCodeButtons(bubble);
     scrollToBottom();
+    // Автоматическое сохранение исходящего сообщения в постоянное хранилище SlugaStorage
+    if (window.SlugaStorage && !isRestoring) {
+      window.SlugaStorage.saveMessage(state.currentSessionId, {
+        isOutgoing: true,
+        text: text,
+        time: formatTime(new Date())
+      });
+    }
+
   }
 
   function renderOutgoingVoice(duration) {
@@ -707,7 +980,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scrollToBottom();
   }
 
-  function renderIncomingMessage(payload) {
+  function renderIncomingMessage(payload, isRestoring = false) {
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble message-in';
 
@@ -750,6 +1023,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (playBtn && payload.audio_base64) {
       playBtn.addEventListener('click', () => {
         voiceManager.playBase64Audio(payload.audio_base64, 'audio/wav');
+      });
+    }
+
+    // Автоматическое сохранение входящего сообщения в постоянное хранилище SlugaStorage
+    if (window.SlugaStorage && !isRestoring) {
+      window.SlugaStorage.saveMessage(state.currentSessionId, {
+        isOutgoing: false,
+        text: payload.text || '',
+        audio_base64: payload.audio_base64 || null,
+        time: formatTime(new Date())
       });
     }
 
@@ -809,59 +1092,133 @@ document.addEventListener('DOMContentLoaded', () => {
   btnCancelSettings.addEventListener('click', closeSettings);
 
   btnSaveSettings.addEventListener('click', () => {
-    const inputUrl = document.getElementById('settingServerUrl');
-    let sUrl = inputUrl ? inputUrl.value.trim() : '';
-    if (sUrl) {
-      sUrl = sUrl.replace(/^wss?:\/\/https?:\/\//i, 'wss://')
-                 .replace(/^http:\/\//i, 'ws://')
-                 .replace(/^https:\/\//i, 'wss://');
-      if (!/^wss?:\/\//i.test(sUrl)) {
-        sUrl = 'wss://' + sUrl;
+    try {
+      const sUrlEl = document.getElementById('settingServerUrl');
+      const bTokenEl = document.getElementById('settingBotToken');
+      const sKeyEl = document.getElementById('settingApiKey');
+      const sModelEl = document.getElementById('settingModel');
+      const sPinEl = document.getElementById('settingPinCode');
+      const sVoiceEl = document.getElementById('settingVoiceAutoplay');
+
+      let sUrl = sUrlEl ? sUrlEl.value.trim() : '';
+      if (sUrl) {
+        sUrl = sUrl.replace(/^wss?:\/\/https?:\/\//i, 'wss://')
+                   .replace(/^http:\/\//i, 'ws://')
+                   .replace(/^https:\/\//i, 'wss://');
+        if (!/^wss?:\/\//i.test(sUrl)) {
+          sUrl = 'wss://' + sUrl;
+        }
+        if (!sUrl.endsWith('/ws')) {
+          sUrl = sUrl.replace(/\/+$/, '') + '/ws';
+        }
+        if (sUrlEl) sUrlEl.value = sUrl;
       }
-      if (!sUrl.endsWith('/ws')) {
-        sUrl = sUrl.replace(/\/+$/, '') + '/ws';
+      const bToken = bTokenEl ? bTokenEl.value.trim() : '';
+      const apiKey = sKeyEl ? sKeyEl.value.trim() : '';
+      const model = sModelEl ? sModelEl.value : 'claude-sonnet-4-6';
+      const pinCode = sPinEl ? sPinEl.value.trim() : '';
+      const voiceAutoplay = sVoiceEl ? sVoiceEl.checked : true;
+
+      state.settings.serverUrl = sUrl;
+      state.settings.botToken = bToken;
+      state.settings.masterToken = bToken;
+      state.settings.apiKey = apiKey;
+      state.settings.model = model;
+      state.settings.pinCode = pinCode;
+      state.settings.voiceAutoplay = voiceAutoplay;
+
+      if (window.SlugaStorage) {
+        window.SlugaStorage.saveSettings(state.settings);
       }
-      if (inputUrl) inputUrl.value = sUrl;
+      localStorage.setItem('sluga_server_url', sUrl);
+      localStorage.setItem('sluga_bot_token', bToken);
+      localStorage.setItem('sluga_master_token', bToken);
+      localStorage.setItem('sluga_api_key', apiKey);
+      localStorage.setItem('sluga_model', model);
+      localStorage.setItem('sluga_pin_code', pinCode);
+      localStorage.setItem('sluga_voice_autoplay', voiceAutoplay);
+
+      closeSettings();
+
+      // Немедленный перезапуск WebSocket с новым адресом и токеном
+      initWebSocket();
+
+      // Если сокет активен, отправляем обновление серверу
+      if (wsClient && wsClient.isConnected) {
+        wsClient.send({ action: 'update_key', key: apiKey });
+        wsClient.send({ action: 'update_model', model: model });
+      }
+    } catch (e) {
+      console.error('[Settings] Error saving settings:', e);
+      closeSettings();
     }
-    state.settings.serverUrl = sUrl;
-
-    const inputToken = document.getElementById('settingMasterToken');
-    if (inputToken) state.settings.masterToken = inputToken.value.trim();
-
-    state.settings.apiKey = document.getElementById('settingApiKey').value.trim();
-    state.settings.model = document.getElementById('settingModel').value;
-    state.settings.pinCode = document.getElementById('settingPinCode').value.trim();
-    state.settings.voiceAutoplay = document.getElementById('settingVoiceAutoplay').checked;
-
-    localStorage.setItem('sluga_server_url', state.settings.serverUrl);
-    localStorage.setItem('sluga_master_token', state.settings.masterToken);
-    localStorage.setItem('sluga_api_key', state.settings.apiKey);
-    localStorage.setItem('sluga_model', state.settings.model);
-    localStorage.setItem('sluga_pin_code', state.settings.pinCode);
-    localStorage.setItem('sluga_voice_autoplay', state.settings.voiceAutoplay);
-
-    closeSettings();
-
-    // Отправляем серверу обновление ключа и модели
-    wsClient.send({
-      action: 'update_key',
-      key: state.settings.apiKey
-    });
-    wsClient.send({
-      action: 'update_model',
-      model: state.settings.model
-    });
-
-    initWebSocket();
   });
 
+
+  // --- Вспомогательные утилиты ---
+  function scrollToBottom() {
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    return (str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function formatTime(date) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  // --- 10. Восстановление истории чата из SlugaStorage при запуске/переключении ---
+  function restoreChatMessages(sessionId) {
+    if (!window.SlugaStorage) return;
+    // Очищаем текущие пузыри (кроме индикатора набора)
+    const bubbles = messagesContainer.querySelectorAll('.message-bubble');
+    bubbles.forEach(b => b.remove());
+
+    const savedMsgs = window.SlugaStorage.getMessages(sessionId);
+    if (savedMsgs && savedMsgs.length > 0) {
+      savedMsgs.forEach(m => {
+        if (m.isOutgoing) {
+          renderOutgoingMessage(m.text, [], true);
+        } else {
+          renderIncomingMessage({
+            text: m.text,
+            audio_base64: m.audio_base64
+          }, true);
+        }
+      });
+    } else {
+      // Приветственное сообщение
+      renderIncomingMessage({
+        text: "👋 **Привет! Я SlugaGram.**\n\nВаш персональный автономный ИИ-ассистент готов к работе.\nВся история наших диалогов теперь **100% сохраняется локально** и не пропадёт при перезагрузке страницы."
+      }, true);
+    }
+    scrollToBottom();
+  }
+
+  // Загружаем сохраненную историю при старте
+  restoreChatMessages(state.currentSessionId);
+
   // --- Функция тестирования подключения ---
-  window.testSlugaConnection = async function(urlOverride, tokenOverride) {
+  window.testSlugaConnection = async function() {
     const testResultEl = document.getElementById('connectionTestResult');
     const inputUrl = document.getElementById('settingServerUrl');
-    const inputToken = document.getElementById('settingMasterToken');
-    let wsUrl = (urlOverride || (inputUrl ? inputUrl.value : '') || state.settings.serverUrl || '').trim();
-    const token = (tokenOverride || (inputToken ? inputToken.value : '') || state.settings.masterToken || '').trim();
+    const inputToken = document.getElementById('settingBotToken');
+    let wsUrl = (inputUrl ? inputUrl.value : state.settings.serverUrl || '').trim();
+    const token = (inputToken ? inputToken.value : (state.settings.botToken || state.settings.masterToken || '')).trim();
 
     if (!testResultEl) return;
     if (!wsUrl) {
@@ -885,7 +1242,7 @@ document.addEventListener('DOMContentLoaded', () => {
     testResultEl.textContent = '⏱️ Проверяю подключение...';
     testResultEl.style.color = '#aaa';
 
-    // Сначала проверяем HTTP /health
+    // Проверяем HTTP /health
     const httpUrl = wsUrl.replace(/^ws:\/\//i, 'http://')
                          .replace(/^wss:\/\//i, 'https://')
                          .replace(/\/ws$/i, '') + '/health';
@@ -938,37 +1295,11 @@ document.addEventListener('DOMContentLoaded', () => {
           testResultEl.style.color = '#e53935';
         }
       };
-    } catch(e) {
+    } catch (e) {
       clearTimeout(timeout);
       testResultEl.textContent = `❌ Ошибка WS: ${e.message}`;
       testResultEl.style.color = '#e53935';
     }
   };
 
-
-  // --- Вспомогательные утилиты ---
-  function scrollToBottom() {
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-  }
-
-  function escapeHtml(str) {
-    return (str || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  function formatTime(date) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
-
-  function formatFileSize(bytes) {
-    if (!bytes) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  }
 });

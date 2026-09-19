@@ -1,6 +1,6 @@
 /**
- * Voice Audio Recorder & Player for SLUGA Messenger (Web & Android Mobile)
- * Поддерживает аппаратную запись аудио через MediaRecorder и гибридный Web Speech API
+ * Voice Audio Recorder & Player for SlugaGram (Web, PC Desktop & Android Mobile)
+ * Поддерживает аппаратную запись аудио через MediaRecorder, визуализацию и воспроизведение
  */
 class SlugaVoiceManager {
   constructor() {
@@ -12,23 +12,19 @@ class SlugaVoiceManager {
     this.recordStartTime = 0;
     this.speechRecognizer = null;
     this.liveTranscript = '';
+    this.currentAudio = null;
   }
 
-  /**
-   * Запрос доступа к микрофону и старт записи
-   */
   async startRecording(onTick = null, onLiveText = null) {
     if (this.isRecording) return true;
     this.audioChunks = [];
     this.liveTranscript = '';
 
     try {
-      // 1. Проверяем поддержку mediaDevices
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('Устройство не предоставляет доступ к микрофону через Web API.');
+        throw new Error('Доступ к микрофону не поддерживается данным браузером.');
       }
 
-      // 2. Запрос микрофона с мягкими fallback-параметрами (для Android гарнитур и PC)
       try {
         this.stream = await navigator.mediaDevices.getUserMedia({ 
           audio: {
@@ -37,12 +33,10 @@ class SlugaVoiceManager {
             autoGainControl: true
           } 
         });
-      } catch (e1) {
-        console.warn('[Voice] Echo cancellation audio failed, fallback to basic audio', e1);
+      } catch (e) {
         this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       }
 
-      // 3. Выбор лучшего поддерживаемого MIME-типа (WebM Opus для Chrome/Android, MP4 для Safari/iOS)
       const mimeTypes = [
         'audio/webm;codecs=opus',
         'audio/webm',
@@ -69,15 +63,10 @@ class SlugaVoiceManager {
         }
       };
 
-      this.mediaRecorder.onerror = (e) => {
-        console.error('[Voice] MediaRecorder error:', e);
-      };
-
-      // Запуск с частым сбросом буфера (200ms)
       this.mediaRecorder.start(200);
       this.isRecording = true;
 
-      // 4. Опциональный параллельный Web Speech API для мгновенной транскрипции на экране
+      // Web Speech API для мгновенной транскрипции
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SpeechRecognition) {
         try {
@@ -95,114 +84,69 @@ class SlugaVoiceManager {
             if (onLiveText) onLiveText(interim);
           };
 
-          this.speechRecognizer.onerror = (err) => {
-            console.warn('[Voice] SpeechRecognition non-fatal error:', err);
-          };
-
+          this.speechRecognizer.onerror = () => {};
           this.speechRecognizer.start();
-        } catch (e) {
-          console.warn('[Voice] SpeechRecognition could not start concurrently:', e);
-        }
+        } catch (e) {}
       }
 
-      // 5. Таймер записи
       this.recordStartTime = Date.now();
-      if (onTick) {
-        onTick(0);
-        this.timerInterval = setInterval(() => {
-          const seconds = Math.floor((Date.now() - this.recordStartTime) / 1000);
-          onTick(seconds);
-        }, 300);
-      }
+      this.timerInterval = setInterval(() => {
+        const elapsedSecs = Math.floor((Date.now() - this.recordStartTime) / 1000);
+        if (onTick) onTick(elapsedSecs);
+      }, 1000);
 
       return true;
     } catch (err) {
-      console.error('[Voice] Microphone access error:', err);
-      let errMsg = 'Не удалось получить доступ к микрофону.';
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        errMsg = 'Доступ к микрофону заблокирован. Разрешите микрофон в настройках браузера/приложения для голосового ввода.';
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        errMsg = 'Микрофон не обнаружен в системе. Подключите микрофон или гарнитуру.';
-      }
-      alert(errMsg);
+      console.error('[Voice] Error starting recording:', err);
+      alert('Ошибка доступа к микрофону: ' + (err.message || 'Разрешите доступ к микрофону в настройках браузера.'));
+      this.cleanup();
       return false;
     }
   }
 
-  /**
-   * Остановка записи и формирование готового Base64 аудиопакета
-   */
   stopRecording() {
     return new Promise((resolve) => {
       if (!this.isRecording || !this.mediaRecorder) {
-        this._cleanup();
+        this.cleanup();
         resolve(null);
         return;
       }
 
-      if (this.speechRecognizer) {
-        try { this.speechRecognizer.stop(); } catch (e) {}
-        this.speechRecognizer = null;
-      }
+      const durationSecs = Math.max(1, Math.floor((Date.now() - this.recordStartTime) / 1000));
 
-      if (this.timerInterval) {
-        clearInterval(this.timerInterval);
-        this.timerInterval = null;
-      }
+      this.mediaRecorder.onstop = async () => {
+        const mimeType = this.mediaRecorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(this.audioChunks, { type: mimeType });
 
-      const durationSec = Math.max(1, Math.round((Date.now() - this.recordStartTime) / 1000));
+        const base64 = await this.blobToBase64(audioBlob);
+        const transcript = this.liveTranscript.trim();
 
-      this.mediaRecorder.onstop = () => {
-        try {
-          const mime = this.mediaRecorder.mimeType || 'audio/webm';
-          const audioBlob = new Blob(this.audioChunks, { type: mime });
-          
-          this._releaseStream();
-          this.isRecording = false;
+        this.cleanup();
 
-          if (audioBlob.size === 0) {
-            console.warn('[Voice] AudioBlob is empty');
-            resolve(null);
-            return;
-          }
-
-          const reader = new FileReader();
-          reader.readAsDataURL(audioBlob);
-          reader.onloadend = () => {
-            const resultStr = reader.result || '';
-            const base64Data = resultStr.includes(',') ? resultStr.split(',')[1] : '';
-            resolve({
-              base64: base64Data,
-              blob: audioBlob,
-              mimeType: audioBlob.type || 'audio/webm',
-              duration: durationSec,
-              liveTranscript: this.liveTranscript
-            });
-          };
-        } catch (e) {
-          console.error('[Voice] Error processing audio blob:', e);
-          this._cleanup();
-          resolve(null);
-        }
+        resolve({
+          blob: audioBlob,
+          base64: base64,
+          mimeType: mimeType,
+          duration: durationSecs,
+          liveTranscript: transcript
+        });
       };
 
       try {
-        if (this.mediaRecorder.state === 'recording') {
-          this.mediaRecorder.requestData();
-        }
         this.mediaRecorder.stop();
-      } catch (err) {
-        console.warn('[Voice] Error stopping mediaRecorder:', err);
-        this._cleanup();
+      } catch (e) {
+        this.cleanup();
         resolve(null);
       }
     });
   }
 
-  /**
-   * Отмена записи без отправки
-   */
   cancelRecording() {
+    this.cleanup();
+  }
+
+  cleanup() {
+    this.isRecording = false;
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
@@ -211,46 +155,41 @@ class SlugaVoiceManager {
       try { this.speechRecognizer.stop(); } catch (e) {}
       this.speechRecognizer = null;
     }
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      try { this.mediaRecorder.stop(); } catch (e) {}
-    }
-    this._releaseStream();
-    this.isRecording = false;
-    this.audioChunks = [];
-  }
-
-  _releaseStream() {
     if (this.stream) {
       this.stream.getTracks().forEach(track => track.stop());
       this.stream = null;
     }
-  }
-
-  _cleanup() {
-    this._releaseStream();
-    this.isRecording = false;
+    this.mediaRecorder = null;
     this.audioChunks = [];
-    if (this.timerInterval) {
-      clearInterval(this.timerInterval);
-      this.timerInterval = null;
-    }
   }
 
-  /**
-   * Воспроизведение аудио Base64 (TTS ответ)
-   */
-  playBase64Audio(base64Str, mimeType = 'audio/wav') {
+  blobToBase64(blob) {
     return new Promise((resolve, reject) => {
-      try {
-        const audioSrc = `data:${mimeType};base64,${base64Str}`;
-        const audio = new Audio(audioSrc);
-        audio.onended = () => resolve();
-        audio.onerror = (e) => reject(e);
-        audio.play().catch(reject);
-      } catch (err) {
-        reject(err);
-      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result;
+        const base64String = result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
+  }
+
+  playAudioBase64(base64Data, mimeType = 'audio/mp3') {
+    if (this.currentAudio) {
+      try {
+        this.currentAudio.pause();
+        this.currentAudio.currentTime = 0;
+      } catch (e) {}
+    }
+    try {
+      this.currentAudio = new Audio(`data:${mimeType};base64,${base64Data}`);
+      return this.currentAudio.play();
+    } catch (e) {
+      console.warn('[Voice] Audio playback failed:', e);
+      return Promise.reject(e);
+    }
   }
 }
 

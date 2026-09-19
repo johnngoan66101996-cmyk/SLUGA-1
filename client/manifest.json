@@ -1,27 +1,26 @@
 {
-  "name": "SLUGA AI — Telegram Messenger",
-  "short_name": "SLUGA",
-  "description": "Автономный мобильный ИИ-мессенджер с Telegram-интерфейсом и поддержкой голосового ввода",
-  "start_url": "/",
-  "scope": "/",
-  "id": "com.sluga.messenger",
+  "name": "SlugaGram — Telegram AI Messenger",
+  "short_name": "SlugaGram",
+  "description": "Автономный мобильный и десктопный ИИ-мессенджер с интерфейсом Telegram для работы с агентом SLUGA",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "com.sluga.slugagram",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#0e1621",
   "theme_color": "#0e1621",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "lang": "ru",
-  "dir": "ltr",
   "categories": ["productivity", "communication", "utilities"],
   "icons": [
     {
-      "src": "/assets/icon-192.png",
+      "src": "./assets/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/assets/icon-512.png",
+      "src": "./assets/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

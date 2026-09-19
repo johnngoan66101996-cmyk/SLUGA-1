@@ -1,6 +1,10 @@
 /**
- * WebSocket Connection Client for SLUGA Messenger
- * Обеспечивает отказоустойчивое соединение с автопереподключением и защитой сессии
+ * SlugaWebSocketClient — Отказоустойчивый WebSocket-клиент SLUGA v2.0
+ * ✅ Автопрефикс URL (можно вводить IP:PORT без ws://)
+ * ✅ Heartbeat ping/pong каждые 25 секунд
+ * ✅ Экспоненциальный backoff при реконнекте (до 30 попыток)
+ * ✅ События: connect, disconnect, reconnecting, authenticated, message, chunk, status, error, pong
+ * ✅ getConnectionInfo() — текущий статус, latency, модель, uptime
  */
 class SlugaWebSocketClient {
   constructor() {
@@ -8,9 +12,18 @@ class SlugaWebSocketClient {
     this.url = '';
     this.token = '';
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 10;
+    this.maxReconnectAttempts = 30;
     this.reconnectDelay = 2000;
     this.isConnected = false;
+    this._reconnectTimer = null;
+    this._heartbeatTimer = null;
+    this._pingTs = null;
+    this.latencyMs = null;
+    this.lastConnectedAt = null;
+    this.serverModel = null;
+    this.serverName = null;
+    this._destroyed = false;
+
     this.handlers = {
       message: [],
       chunk: [],
@@ -18,87 +31,212 @@ class SlugaWebSocketClient {
       error: [],
       connect: [],
       disconnect: [],
-      authenticated: []
+      reconnecting: [],
+      authenticated: [],
+      pong: []
     };
   }
 
-  connect(url, token = '') {
-    this.url = url || (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/ws';
-    this.token = token;
+  /**
+   * Нормализует URL: добавляет ws:// если нет схемы, добавляет /ws если нет пути.
+   * Примеры:
+   *   "77.222.40.84:8080"      → "ws://77.222.40.84:8080/ws"
+   *   "localhost:8080"         → "ws://localhost:8080/ws"
+   *   "myserver.com"           → "ws://myserver.com/ws"
+   *   "wss://myserver.com/ws" → "wss://myserver.com/ws" (без изменений)
+   */
+  static normalizeUrl(rawUrl) {
+    let url = (rawUrl || '').trim();
+    if (!url) return '';
+    // Добавляем схему если нет
+    if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+      url = 'ws://' + url;
+    }
+    // Добавляем /ws если путь отсутствует или только /
+    try {
+      const parsed = new URL(url);
+      if (!parsed.pathname || parsed.pathname === '/') {
+        parsed.pathname = '/ws';
+      }
+      return parsed.toString();
+    } catch (e) {
+      return url;
+    }
+  }
 
+  /**
+   * Подключиться к серверу.
+   * @param {string} url    - адрес сервера (ws://, wss://, или просто IP:PORT)
+   * @param {string} token  - Bot Token для авторизации
+   */
+  connect(url, token = '') {
+    if (this._destroyed) return;
+    this.url = SlugaWebSocketClient.normalizeUrl(url);
+    this.token = token;
+    this._clearTimers();
+    this._openSocket();
+  }
+
+  _openSocket() {
+    if (this._destroyed) return;
     if (this.ws) {
-      try {
-        this.ws.close();
-      } catch (e) {}
+      try { this.ws.close(); } catch (_) {}
+      this.ws = null;
     }
 
     try {
-      const fullUrl = this.token ? `${this.url}?token=${encodeURIComponent(this.token)}` : this.url;
+      let fullUrl = this.url;
+      if (this.token) {
+        const delimiter = fullUrl.includes('?') ? '&' : '?';
+        fullUrl = `${fullUrl}${delimiter}token=${encodeURIComponent(this.token)}`;
+      }
+
       this.ws = new WebSocket(fullUrl);
 
       this.ws.onopen = () => {
         this.isConnected = true;
         this.reconnectAttempts = 0;
+        this.lastConnectedAt = new Date();
         this.emit('connect', { url: this.url });
+        this._startHeartbeat();
       };
 
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          this.handleIncoming(data);
+          this._handleIncoming(data);
         } catch (err) {
-          console.error('[WS] Failed to parse JSON message:', event.data, err);
+          console.error('[WS] JSON parse error:', event.data, err);
         }
       };
 
       this.ws.onerror = (err) => {
-        console.warn('[WS] Connection error:', err);
-        this.emit('error', err);
+        this.emit('error', { type: 'socket_error', detail: err });
       };
 
       this.ws.onclose = (event) => {
         this.isConnected = false;
-        this.emit('disconnect', event);
-        this.scheduleReconnect();
+        this._stopHeartbeat();
+        this.emit('disconnect', { code: event.code, reason: event.reason });
+        if (!this._destroyed) {
+          this._scheduleReconnect();
+        }
       };
     } catch (e) {
-      console.error('[WS] Initialization failed:', e);
-      this.scheduleReconnect();
+      console.error('[WS] Init failed:', e);
+      this.emit('error', { type: 'init_error', detail: e });
+      this._scheduleReconnect();
     }
   }
 
-  scheduleReconnect() {
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++;
-      const timeout = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 15000);
-      console.log(`[WS] Reconnecting in ${timeout}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-      setTimeout(() => this.connect(this.url, this.token), timeout);
+  _scheduleReconnect() {
+    if (this._destroyed || this.reconnectAttempts >= this.maxReconnectAttempts) return;
+    this.reconnectAttempts++;
+    const delay = Math.min(this.reconnectDelay * Math.pow(1.4, this.reconnectAttempts - 1), 12000);
+    this.emit('reconnecting', {
+      attempt: this.reconnectAttempts,
+      maxAttempts: this.maxReconnectAttempts,
+      delayMs: Math.round(delay)
+    });
+    this._reconnectTimer = setTimeout(() => this._openSocket(), delay);
+  }
+
+  _startHeartbeat() {
+    this._stopHeartbeat();
+    this._heartbeatTimer = setInterval(() => {
+      if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this._pingTs = Date.now();
+        this.ws.send(JSON.stringify({ action: 'ping' }));
+      }
+    }, 25000);
+  }
+
+  _stopHeartbeat() {
+    if (this._heartbeatTimer) {
+      clearInterval(this._heartbeatTimer);
+      this._heartbeatTimer = null;
     }
   }
 
-  handleIncoming(payload) {
-    // Поддерживаем оба формата: {type: ...} и {event: ...}
+  _clearTimers() {
+    this._stopHeartbeat();
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+  }
+
+  _handleIncoming(payload) {
     const type = payload.type || payload.event || 'message';
-    if (type === 'authenticated') {
-      this.emit('authenticated', payload);
-    } else if (type === 'chunk') {
-      this.emit('chunk', payload);
-    } else if (type === 'status') {
-      this.emit('status', payload);
-    } else if (type === 'error') {
-      this.emit('error', payload);
-    } else {
-      this.emit('message', payload);
+
+    if (type === 'pong') {
+      if (this._pingTs) {
+        this.latencyMs = Date.now() - this._pingTs;
+        this._pingTs = null;
+      }
+      this.emit('pong', { latencyMs: this.latencyMs });
+      return;
     }
+
+    if (type === 'authenticated') {
+      this.serverModel = payload.model || payload.liteai_model || null;
+      this.serverName = payload.bot_name || 'SLUGA';
+      this.emit('authenticated', payload);
+      return;
+    }
+
+    if (type === 'chunk') { this.emit('chunk', payload); return; }
+    if (type === 'status') { this.emit('status', payload); return; }
+    if (type === 'error')  { this.emit('error', payload); return; }
+
+    this.emit('message', payload);
   }
 
   send(data) {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('[WS] Socket is not open. Message queued or dropped.');
+      console.warn('[WS] Socket not open — message dropped.');
       return false;
     }
     this.ws.send(JSON.stringify(data));
     return true;
+  }
+
+  /**
+   * Разрыв соединения и полная остановка (logout / смена сервера).
+   */
+  destroy() {
+    this._destroyed = true;
+    this._clearTimers();
+    if (this.ws) {
+      try { this.ws.close(1000, 'User logout'); } catch (_) {}
+      this.ws = null;
+    }
+    this.isConnected = false;
+  }
+
+  /**
+   * Переподключиться заново (например, после смены сервера).
+   */
+  reconnect(url, token) {
+    this._destroyed = false;
+    this.reconnectAttempts = 0;
+    this.connect(url, token);
+  }
+
+  /**
+   * Получить информацию о текущем соединении.
+   * @returns {{ url, model, latencyMs, lastConnectedAt, isConnected, reconnectAttempts }}
+   */
+  getConnectionInfo() {
+    return {
+      url: this.url,
+      model: this.serverModel,
+      serverName: this.serverName,
+      latencyMs: this.latencyMs,
+      lastConnectedAt: this.lastConnectedAt,
+      isConnected: this.isConnected,
+      reconnectAttempts: this.reconnectAttempts
+    };
   }
 
   on(event, callback) {
@@ -114,15 +252,9 @@ class SlugaWebSocketClient {
   }
 
   emit(event, data) {
-    if (this.handlers[event]) {
-      this.handlers[event].forEach(cb => {
-        try {
-          cb(data);
-        } catch (e) {
-          console.error(`[WS] Handler error on '${event}':`, e);
-        }
-      });
-    }
+    (this.handlers[event] || []).forEach(cb => {
+      try { cb(data); } catch (e) { console.error(`[WS] Error in '${event}' handler:`, e); }
+    });
   }
 }
 

@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>SLUGA_bot — Telegram AI</title>
-  <link rel="manifest" href="/manifest.json">
+  <title>SlugaGram — Telegram AI Messenger</title>
+  <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0e1621">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="icon" href="/assets/icon-192.png" type="image/png">
+  <link rel="icon" href="./assets/icon-192.png" type="image/png">
   <style>
 
 /* ==========================================================================
@@ -909,6 +909,41 @@ body {
   color: #ffffff;
 }
 
+.btn-send-recording {
+  background: var(--tg-accent-blue);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.btn-send-recording:hover {
+  background: var(--tg-accent-hover);
+}
+
+.btn-send-recording:active {
+  transform: scale(0.95);
+}
+
+.input-panel.recording-mode #btnTgMenu,
+.input-panel.recording-mode #btnAttach,
+.input-panel.recording-mode #btnEmoji,
+.input-panel.recording-mode #btnAction {
+  display: none !important;
+}
+
+.input-panel.recording-mode .tg-input-box-wrapper {
+  width: 100%;
+}
+
 .tg-input-box-wrapper {
 
   flex: 1;
@@ -1040,7 +1075,10 @@ body {
 
 .modal-card {
   width: 440px;
-  max-width: 90vw;
+  max-width: 92vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
   background: var(--tg-bg-sidebar);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1081,6 +1119,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .form-group {
@@ -1167,6 +1207,232 @@ body {
   }
 }
 
+/* ==========================================================================
+   PAIR SCREEN — Экран первой настройки (одинразовый паринг)
+   ========================================================================== */
+.pair-screen-overlay {
+  position: fixed;
+  inset: 0;
+  background: #0e1621;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.pair-screen-overlay.active {
+  opacity: 1;
+  pointer-events: all;
+}
+.pair-card {
+  background: #17212b;
+  border: 1px solid #232f3d;
+  border-radius: 16px;
+  padding: 36px 32px 28px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: slideUp 0.35s cubic-bezier(.22,.61,.36,1);
+}
+@keyframes slideUp {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.pair-logo {
+  text-align: center;
+  font-size: 54px;
+  line-height: 1;
+  filter: drop-shadow(0 0 18px #5288c1aa);
+}
+.pair-title {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+  color: #f5f5f5;
+  letter-spacing: -.3px;
+}
+.pair-subtitle {
+  text-align: center;
+  font-size: 13px;
+  color: #7f91a4;
+  margin-top: -14px;
+}
+.pair-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pair-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7f91a4;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.pair-input {
+  background: #0e1621;
+  border: 1.5px solid #232f3d;
+  border-radius: 10px;
+  color: #f5f5f5;
+  font-size: 14px;
+  padding: 12px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+.pair-input:focus {
+  border-color: #5288c1;
+}
+.pair-input.error {
+  border-color: #e53935;
+  animation: shake 0.3s;
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-6px); }
+  75%       { transform: translateX(6px); }
+}
+.pair-hint {
+  font-size: 11.5px;
+  color: #5f7080;
+  line-height: 1.5;
+}
+.pair-check-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pair-btn-check {
+  flex-shrink: 0;
+  background: #1a3a5c;
+  border: 1.5px solid #2b5278;
+  color: #6ab2f2;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.pair-btn-check:hover { background: #214877; }
+.pair-btn-check:disabled { opacity: 0.5; cursor: default; }
+.pair-server-status {
+  font-size: 12px;
+  color: #5f7080;
+  flex: 1;
+  min-height: 16px;
+  transition: color 0.2s;
+}
+.pair-pin-section {
+  border-top: 1px solid #232f3d;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pair-pin-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #7f91a4;
+  user-select: none;
+}
+.pair-pin-toggle input[type=checkbox] { accent-color: #5288c1; }
+.pair-pin-input-wrap {
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+}
+.pair-pin-input-wrap.visible { display: flex; }
+.pair-pin-input {
+  background: #0e1621;
+  border: 1.5px solid #232f3d;
+  border-radius: 10px;
+  color: #f5f5f5;
+  font-size: 22px;
+  padding: 10px 14px;
+  outline: none;
+  text-align: center;
+  letter-spacing: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.pair-pin-input:focus { border-color: #5288c1; }
+.pair-btn-connect {
+  background: linear-gradient(135deg, #5288c1, #3d6fa0);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: .2px;
+  box-shadow: 0 4px 20px rgba(82,136,193,0.3);
+}
+.pair-btn-connect:hover   { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(82,136,193,0.45); }
+.pair-btn-connect:active  { transform: translateY(0); }
+.pair-btn-connect:disabled { opacity: 0.5; cursor: default; transform: none; }
+.pair-error {
+  text-align: center;
+  font-size: 12px;
+  color: #e57373;
+  display: none;
+  animation: fadeIn 0.2s;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* PIN LOCK — кнопка Сменить сервер */
+.btn-change-server {
+  background: none;
+  border: none;
+  color: #5288c1;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.2s;
+}
+.btn-change-server:hover { color: #6ab2f2; }
+
+/* Статус-бар подключения в хедере */
+.connection-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #7f91a4;
+  padding: 2px 0 0 0;
+  transition: all 0.3s;
+}
+.conn-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #8e8e93;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.conn-dot.online  { background: #4fae4e; box-shadow: 0 0 5px #4fae4eaa; }
+.conn-dot.offline { background: #e53935; }
+.conn-dot.pairing { background: #ff9800; animation: pulse-dot 1s infinite; }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+}
+
 </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1185,11 +1451,14 @@ body {
           <div class="header-avatar" id="headerAvatar">🤖</div>
           <span class="online-indicator"></span>
         </div>
-        <div class="header-info">
+      <div class="header-info">
           <div class="header-title-row">
-            <h2 id="headerTitle">SLUGA_bot</h2>
+            <h2 id="headerTitle">SlugaGram</h2>
           </div>
-          <span class="header-status" id="headerStatus">бот</span>
+          <div class="connection-status-bar" id="connectionStatusBar">
+            <span class="conn-dot pairing" id="connDot"></span>
+            <span id="headerStatus">подключение...</span>
+          </div>
         </div>
       </div>
       <div class="chat-header-right">
@@ -1204,7 +1473,7 @@ body {
 
       <div class="message-bubble message-in">
         <div class="message-text">
-          👋 Привет! Я — <strong>SLUGA_bot</strong>, автономный инженерный агент.
+          👋 Привет! Я — <strong>SlugaGram</strong>, автономный инженерный агент.
           <br><br>
           ⚡ Нажмите синюю кнопку <strong>«Меню»</strong> внизу слева для быстрого доступа к командам, смене моделей <strong>LiteAI</strong> и настройкам.
           <br><br>
@@ -1314,6 +1583,7 @@ body {
           <span class="recording-time-text" id="voiceRecordingDuration">0:00</span>
           <span class="recording-live-text" id="voiceRecordingLiveText">Слушаю... Говорите</span>
           <button type="button" class="btn-cancel-recording" id="btnCancelRecording" title="Отменить запись">✕ Отмена</button>
+          <button type="button" class="btn-send-recording" id="btnSendRecording" title="Отправить голосовое сообщение">📤 Отправить</button>
         </div>
 
         <textarea 
@@ -1334,6 +1604,74 @@ body {
   </main>
 </div>
 
+<!-- =====================================================================
+     PAIR SCREEN — Первая настройка подключения (показывается 1 раз)
+     ===================================================================== -->
+<div class="pair-screen-overlay" id="pairScreenOverlay">
+  <div class="pair-card">
+    <div class="pair-logo">🤖</div>
+    <div class="pair-title">SLUGA</div>
+    <div class="pair-subtitle">Автономный ИИ-Инженер &mdash; первый запуск</div>
+
+    <div class="pair-field">
+      <label for="pairServerUrl">Адрес сервера</label>
+      <div class="pair-check-row">
+        <input
+          type="text"
+          id="pairServerUrl"
+          class="pair-input"
+          placeholder="77.222.40.84:8080"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          style="flex:1;"
+        >
+        <button class="pair-btn-check" id="pairBtnCheck" type="button">🔍 Проверить</button>
+      </div>
+      <span class="pair-server-status" id="pairServerStatus"></span>
+      <span class="pair-hint">Пример: <b>77.222.40.84:8080</b> (VPS) или <b>localhost:8080</b> (локально).<br>Схема <code>ws://</code> добавится автоматически.</span>
+    </div>
+
+    <div class="pair-field">
+      <label for="pairBotToken">Bot Token</label>
+      <input
+        type="password"
+        id="pairBotToken"
+        class="pair-input"
+        placeholder="sluga-XXXX-XXXXXX"
+        autocomplete="off"
+      >
+      <span class="pair-hint">Секретный токен из файла <code>.env</code> на сервере SLUGA (<code>SLUGA_BOT_TOKEN</code>).</span>
+    </div>
+
+    <div class="pair-pin-section">
+      <label class="pair-pin-toggle" for="pairEnablePin">
+        <input type="checkbox" id="pairEnablePin">
+        Защитить PIN-кодом (рекомендуется для смартфонов)
+      </label>
+      <div class="pair-pin-input-wrap" id="pairPinWrap">
+        <input
+          type="password"
+          id="pairPinInput"
+          class="pair-pin-input"
+          maxlength="6"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          placeholder="••••"
+          autocomplete="new-password"
+        >
+        <span class="pair-hint" style="text-align:center;">4–6 цифр. Если оставить пустым — вход без PIN.</span>
+      </div>
+    </div>
+
+    <p class="pair-error" id="pairError"></p>
+
+    <button class="pair-btn-connect" id="pairBtnConnect" type="button" disabled>
+      🔗 Подключить и сохранить
+    </button>
+  </div>
+</div>
+
 <!-- МОДАЛЬНОЕ ОКНО: НАСТРОЙКИ & LITEAI КЛЮЧ -->
 <div class="modal-overlay" id="settingsModal">
   <div class="modal-card">
@@ -1343,21 +1681,23 @@ body {
     </div>
     <div class="modal-body">
       <div class="form-group">
-        <label class="form-label" for="settingServerUrl">Адрес WebSocket сервера</label>
-        <input type="text" class="form-input" id="settingServerUrl" placeholder="ws://localhost:8080/ws (или wss://домен/ws)">
-        <span class="form-hint">Оставьте пустым для автоматического подключения к текущему серверу</span>
+        <label class="form-label" for="settingServerUrl">Адрес сервера (WebSocket)</label>
+        <input type="text" class="form-input" id="settingServerUrl" placeholder="wss://ваш-домен.ru/ws или ws://IP:8080/ws">
+        <span class="form-hint">Пример: <b>wss://ваш-домен.ru/ws</b> (хостинг) или <b>ws://IP:8080/ws</b> (локально)</span>
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="settingMasterToken">Токен связи с ботом (Bot Token)</label>
-        <input type="text" class="form-input" id="settingMasterToken" placeholder="sluga-XXXX-XXXXXX">
-        <span class="form-hint">Секретный токен сопряжения, выданный сервером SLUGA при установке</span>
+        <label class="form-label" for="settingBotToken">Токен связи с ботом (Bot Token)</label>
+        <input type="text" class="form-input" id="settingBotToken" placeholder="sluga-XXXX-XXXXXX">
+        <span class="form-hint">Секретный токен сопряжения, выданный сервером при установке</span>
       </div>
 
       <div class="form-group">
-        <label class="form-label" for="settingApiKey">LiteAI API Key (<a href="https://liteai.tech/docs" target="_blank" style="color: var(--tg-accent-blue);">liteai.tech</a>)</label>
-        <input type="password" class="form-input" id="settingApiKey" placeholder="sk-bf-...">
-        <span class="form-hint">Единый ключ формата sk-bf-... от сервиса LiteAI.</span>
+        <label class="form-label" for="settingApiKey">LiteAI API Key — <span style="color: #4fae4e; font-weight:400;">управляется на сервере через .env</span></label>
+        <div style="background:#0e1621; border:1.5px solid #2b5278; border-radius:8px; padding:10px 14px; font-size:12px; color:#5f7080;">
+          🔐 API Key хранится только на сервере в файле <code style="color:#6ab2f2;">.env</code>.
+          Клиент не получает и не хранит ключ. Для смены ключа отредактируйте <code style="color:#6ab2f2;">.env</code> на сервере.
+        </div>
       </div>
 
       <div class="form-group">
@@ -1381,7 +1721,7 @@ body {
             <option value="granite-4.2-8b">Granite 4.2 8B (IBM)</option>
           </optgroup>
         </select>
-        <span class="form-hint">Расход токенов зависит от модели: Haiku и DeepSeek расходуют минимум токенов, Sonnet и Opus — мощные для глубокого кода.</span>
+        <span class="form-hint" style="color:#64b5f6; font-weight:600;">💡 Баланс зависит от выбора модели</span>
       </div>
 
       <div class="form-group">
@@ -1414,22 +1754,35 @@ body {
   <div class="modal-card" style="width: 340px; text-align: center;">
     <div class="modal-body" style="gap: 16px; padding: 28px 24px;">
       <div style="font-size: 42px;">🔒</div>
-      <h3 style="color: var(--tg-text-primary); font-size: 18px;">Вход в SLUGA_bot</h3>
+      <h3 style="color: var(--tg-text-primary); font-size: 18px;">Вход в SlugaGram</h3>
       <p style="font-size: 13px; color: var(--tg-text-secondary);">Введите защитный PIN-код</p>
-      
-      <input type="password" maxlength="6" class="form-input" id="inputUnlockPin" placeholder="••••" style="text-align: center; font-size: 24px; letter-spacing: 8px;">
+      <p id="pinLockServerUrl" style="font-size: 11px; color: #5f7080; font-family: monospace; margin: -8px 0;"></p>
+
+      <input
+        type="password"
+        maxlength="6"
+        inputmode="numeric"
+        pattern="[0-9]*"
+        class="form-input"
+        id="inputUnlockPin"
+        placeholder="••••"
+        style="text-align: center; font-size: 24px; letter-spacing: 8px;"
+        autocomplete="off"
+      >
       <p id="pinErrorMsg" style="color: #e53935; font-size: 12px; display: none;">Неверный PIN-код!</p>
-      
+
       <button class="btn-primary" id="btnUnlockApp" style="width: 100%; margin-top: 8px;">Разблокировать</button>
+      <button class="btn-change-server" id="btnChangeServer" type="button">↩ Сменить сервер</button>
     </div>
   </div>
 </div>
 
 <audio id="ttsAudioPlayer" style="display: none;"></audio>
 
-<script src="/js/websocket.js?v=2.1.0"></script>
-<script src="/js/voice.js?v=2.1.0"></script>
-<script src="/js/app.js?v=2.1.0"></script>
+<script src="./js/storage.js"></script>
+<script src="./js/websocket.js"></script>
+<script src="./js/voice.js?v=2.1.0"></script>
+<script src="./js/app.js?v=2.1.0"></script>
 
 </body>
 </html>
