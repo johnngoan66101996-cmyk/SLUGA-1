@@ -400,10 +400,22 @@ HTEOF
         echo "   🚀 Скопировано также в: $HOME"
     fi
 
+    # Для домена и туннеля uvicorn должен слушать локально 127.0.0.1
+    if grep -q "^SERVER_HOST=" .env 2>/dev/null; then
+        sed -i 's|^SERVER_HOST=.*|SERVER_HOST=127.0.0.1|' .env
+    else
+        echo "SERVER_HOST=127.0.0.1" >> .env
+    fi
     FINAL_CLIENT_URL="wss://${USER_DOMAIN}/ws"
 
 else
     echo "   ✅ Выбран прямой IP: ws://${SERVER_IP}:${SRV_PORT}/ws"
+    # Для прямого IP uvicorn ОБЯЗАН слушать на всех интерфейсах 0.0.0.0
+    if grep -q "^SERVER_HOST=" .env 2>/dev/null; then
+        sed -i 's|^SERVER_HOST=.*|SERVER_HOST=0.0.0.0|' .env
+    else
+        echo "SERVER_HOST=0.0.0.0" >> .env
+    fi
     FINAL_CLIENT_URL="ws://${SERVER_IP}:${SRV_PORT}/ws"
 fi
 echo "🔹 [ШАГ 6/6] Запуск серверного агента..."
