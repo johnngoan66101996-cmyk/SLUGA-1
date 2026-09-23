@@ -25,3 +25,10 @@ dist/
 .DS_Store
 Thumbs.db
 *.log
+*.pid
+*.sock
+connection_info.txt
+tools/cloudflared
+run_live.sh
+watchdog.sh
+
