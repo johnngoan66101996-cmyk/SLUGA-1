@@ -41,7 +41,7 @@ from core.auth import rotate_token, get_or_create_bot_token
 def cmd_status():
     """Выводит сводный статус агента."""
     meta = LITEAI_MODELS_CATALOG.get(settings.liteai_model, {})
-    domain_status = settings.sluga_domain if settings.sluga_domain else "⚠️ НЕ НАСТРОЕН! добавьте SLUGA_DOMAIN=sugatov-it.ru в .env"
+    domain_status = settings.sluga_domain if settings.sluga_domain else "⚠️ НЕ НАСТРОЕН! добавьте SLUGA_DOMAIN=your-domain.ru в .env"
     print("=" * 60)
     print("🤖 СЕРВЕРНЫЙ АГЕНТ SLUGA — ТЕКУЩИЙ СТАТУС")
     print("=" * 60)
@@ -80,7 +80,7 @@ def cmd_info():
     if not settings.sluga_domain:
         print("")
         print("⚠️  SLUGA_DOMAIN не задан! Добавьте в .env:")
-        print("    SLUGA_DOMAIN=sugatov-it.ru")
+        print("    SLUGA_DOMAIN=your-domain.ru")
     print("=" * 60)
 
 

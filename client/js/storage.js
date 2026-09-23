@@ -14,7 +14,7 @@ const SlugaStorage = {
     return {
       serverUrl: '',
       botToken: '',
-      model: 'claude-sonnet-4-6',
+      model: 'gpt-5.6-sol',
       voiceAutoplay: true,
       pinCode: '',
       isPaired: false       // true после первого успешного подключения
@@ -25,7 +25,11 @@ const SlugaStorage = {
     try {
       const raw = localStorage.getItem(this.SETTINGS_KEY);
       if (raw) {
-        return { ...this.getDefaultSettings(), ...JSON.parse(raw) };
+        const s = { ...this.getDefaultSettings(), ...JSON.parse(raw) };
+        if (s.model === 'claude-sonnet-4-6') {
+          s.model = 'gpt-5.6-sol';
+        }
+        return s;
       }
     } catch (e) {
       console.warn('[Storage] Ошибка чтения настроек:', e);

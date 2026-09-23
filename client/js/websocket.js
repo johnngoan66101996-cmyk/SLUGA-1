@@ -48,9 +48,12 @@ class SlugaWebSocketClient {
   static normalizeUrl(rawUrl) {
     let url = (rawUrl || '').trim();
     if (!url) return '';
+    const isHttps = typeof window !== 'undefined' && window.location && window.location.protocol === 'https:';
     // Добавляем схему если нет
     if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
-      url = 'ws://' + url;
+      url = (isHttps ? 'wss://' : 'ws://') + url;
+    } else if (isHttps && url.startsWith('ws://')) {
+      url = 'wss://' + url.slice(5);
     }
     // Добавляем /ws если путь отсутствует или только /
     try {
@@ -71,17 +74,28 @@ class SlugaWebSocketClient {
    */
   connect(url, token = '') {
     if (this._destroyed) return;
-    this.url = SlugaWebSocketClient.normalizeUrl(url);
+    const normalizedUrl = SlugaWebSocketClient.normalizeUrl(url);
+    if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN && this.url === normalizedUrl && this.token === token) {
+      return;
+    }
+    this.url = normalizedUrl;
     this.token = token;
+    this.reconnectAttempts = 0;
     this._clearTimers();
     this._openSocket();
   }
 
   _openSocket() {
     if (this._destroyed) return;
+    this._clearTimers();
     if (this.ws) {
-      try { this.ws.close(); } catch (_) {}
+      const oldWs = this.ws;
       this.ws = null;
+      oldWs.onopen = null;
+      oldWs.onmessage = null;
+      oldWs.onerror = null;
+      oldWs.onclose = null;
+      try { oldWs.close(1000, 'Replaced'); } catch (_) {}
     }
 
     try {
@@ -91,9 +105,11 @@ class SlugaWebSocketClient {
         fullUrl = `${fullUrl}${delimiter}token=${encodeURIComponent(this.token)}`;
       }
 
-      this.ws = new WebSocket(fullUrl);
+      const currentWs = new WebSocket(fullUrl);
+      this.ws = currentWs;
 
-      this.ws.onopen = () => {
+      currentWs.onopen = () => {
+        if (this.ws !== currentWs) return;
         this.isConnected = true;
         this.reconnectAttempts = 0;
         this.lastConnectedAt = new Date();
@@ -101,7 +117,8 @@ class SlugaWebSocketClient {
         this._startHeartbeat();
       };
 
-      this.ws.onmessage = (event) => {
+      currentWs.onmessage = (event) => {
+        if (this.ws !== currentWs) return;
         try {
           const data = JSON.parse(event.data);
           this._handleIncoming(data);
@@ -110,11 +127,13 @@ class SlugaWebSocketClient {
         }
       };
 
-      this.ws.onerror = (err) => {
+      currentWs.onerror = (err) => {
+        if (this.ws !== currentWs) return;
         this.emit('error', { type: 'socket_error', detail: err });
       };
 
-      this.ws.onclose = (event) => {
+      currentWs.onclose = (event) => {
+        if (this.ws !== currentWs) return;
         this.isConnected = false;
         this._stopHeartbeat();
         this.emit('disconnect', { code: event.code, reason: event.reason });
@@ -131,6 +150,10 @@ class SlugaWebSocketClient {
 
   _scheduleReconnect() {
     if (this._destroyed || this.reconnectAttempts >= this.maxReconnectAttempts) return;
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
     this.reconnectAttempts++;
     const delay = Math.min(this.reconnectDelay * Math.pow(1.4, this.reconnectAttempts - 1), 12000);
     this.emit('reconnecting', {

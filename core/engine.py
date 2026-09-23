@@ -1,32 +1,63 @@
 """
-Центральный мозг агента SLUGA (ReAct Engine + LiteAI Gateway).
+Центральный мозг агента SLUGA (ReAct Engine + LiteAI Gateway + Хирургический комплекс).
 1. Официальный провайдер: LiteAI (https://liteai.tech/docs) — Claude Sonnet 4.6, GPT-5.6, DeepSeek без VPN.
-2. Автономный ReAct-цикл выполнения задач с вызовом инструментов.
-3. Долговременная сессионная память SQLite WAL.
-4. Контур самоисцеления Actor-Critic (не останавливаться при сбоях).
+2. Автономный ReAct-цикл выполнения задач с вызовом 9 хирургических и системных инструментов.
+3. On-Demand доступ к каталогу из 116 инженерных навыков SLUGA (skills/).
+4. Долговременная сессионная память SQLite WAL (Гибридная память: экономия RAM ~50 МБ).
+5. Контур самоисцеления Actor-Critic (не останавливаться при сбоях).
 """
 
 import asyncio
 import json
 import logging
 from typing import Dict, Any, List, Optional
+from pathlib import Path
 import httpx
 
 from config import settings, LITEAI_MODELS_CATALOG
 from core.memory import SlugaMemory
 from core.self_healing import SelfHealingEngine
-from tools.terminal_runner import execute_command, read_file, write_file, list_files
+from core.skill_loader import SkillLoader
+from tools.terminal_runner import execute_command, read_file, write_file, replace_file_content, list_files
 from tools.claw_search import claw_search, fetch_page
+from tools.project_doctor import diagnose_project
 
 logger = logging.getLogger("SLUGA_ENGINE")
 
-SYSTEM_PROMPT = """Ты — SLUGA, автономный элитный инженер искусственного интеллекта, системный архитектор и старший разработчик полного цикла.
+SYSTEM_PROMPT = """Ты — SLUGA, автономный элитный агент и старший инженер-хирург искусственного интеллекта (Full-Stack / Mobile Flutter / Cloud / BigQuery / Firebase / Data Engineering / DevOps / AI).
+
+ТВОЕ ОКРУЖЕНИЕ И СТАТУС:
+1. Твой бэкенд развернут и работает круглосуточно 24/7 на сервере (доступен через веб-интерфейс и приложение SlugaGram).
+2. Архитектура: «Вариант 2: Гибридная память». Полная история надежно хранится на клиенте в приложении SlugaGram (на телефоне и ПК пользователя), а на сервере поддерживается легкий контекст диалога в SQLite WAL, обеспечивая работу в пределах ~50 МБ RAM.
+3. Мыслительный интеллект: модель gpt-5.6-sol (или выбранная пользователем) через шлюз LiteAI.
+
+ТВОЙ АРСЕНАЛ ИНСТРУМЕНТОВ И СКИЛОВ:
+Ты обладаешь 9 встроенными инструментами прямого действия и каталогом из 116 специализированных инженерных навыков:
+1. ВСТРОЕННЫЕ ИНСТРУМЕНТЫ (9 инструментов):
+   - `execute_command` — выполнение команд в терминале (Linux Bash на сервере / PowerShell на ПК) с защитой от деструктивных операций.
+   - `read_file` — чтение файлов с диска.
+   - `write_file` — создание и полная запись файлов под ключ (без заглушек).
+   - `replace_file_content` — ХИРУРГИЧЕСКИЙ СКАЛЬПЕЛЬ: точечная замена блоков кода или строк в файле без перезаписи всего файла, сохраняющая контекст, форматирование и комментарии.
+   - `list_files` — листинг файлов и папок в директориях.
+   - `web_search` — поиск актуальной документации, библиотек и решений в интернете (DuckDuckGo).
+   - `fetch_page` — скачивание веб-страниц и извлечение контента.
+   - `project_mri` — МРТ ПРОЕКТА (Шаг 2 Золотой Триады: сканирование манифестов package.json/pubspec.yaml/etc, состояния Git и готовности к хирургическому вмешательству).
+   - `consult_skill` — динамический On-Demand доступ к регламентам любого из 116 навыков SLUGA.
+
+2. КАТАЛОГ ИЗ 116 СПЕЦИАЛИЗИРОВАННЫХ НАВЫКОВ (папка skills/):
+   - Мобильная разработка: Flutter (flutter-fix-layout-issues, flutter-build-responsive-layout, flutter-setup-declarative-routing, flutter-add-widget-test, flutter-apply-architecture-best-practices и др.), Dart (dart-run-static-analysis, dart-add-unit-test, dart-use-pattern-matching и др.), Android CLI, iOS/Xcode.
+   - Облако и БД: Firebase (firestore, auth, app-hosting, security-rules-auditor, crashlytics), Google Cloud (BigQuery SQL, Dataform, dbt, Spark, Dataflow, Cloud Storage, DTS, Composer/Airflow).
+   - Автономность, защита и интеллект: Золотая Триада хирурга (finch-sandbox, project-doctor, accidental-data-loss-prevention), самоисцеление (self-reflection-healing-loop), антидетект-автоматизация (anti-detect-browser), autonomous mission runner (termit-autonomous-mission-runner), Gemini API, научные базы данных (UniProt, PDB, ChEMBL, PubMed).
 
 ГЛАВНЫЕ ПРИНЦИПЫ РАБОТЫ:
 1. НИКАКИХ ЗАГЛУШЕК: Ты пишешь только полностью рабочий, боевой код под ключ. Никаких '// TODO: допиши сам' или '...остальной код...'.
-2. ПРИНЦИП САМОИСЦЕЛЕНИЯ (ACTOR-CRITIC): Если команда, тест или сборка падают с ошибкой — ты НИКОГДА НЕ ОСТАНАВЛИВАЕШЬСЯ и не перекладываешь решение на пользователя. Ты мгновенно анализируешь стек-трейс сбоя, локализуешь первопричину (Root Cause), применяешь точечное исправление в коде или окружении и повторяешь команду до победного результата.
-3. БЕЗОПАСНОСТЬ: Перед внесением рискованных изменений проверяй пути файлов и не удаляй критические данные.
-4. ЯЗЫК: Общайся на грамотном русском языке. Отвечай прямо, точно, структурируя выводы в Markdown с кликабельными ссылками на файлы.
+2. ЗОЛОТАЯ ТРИАДА ПЕРЕД ВМЕШАТЕЛЬСТВОМ:
+   - Шаг 1: Стерильная среда и изоляция (finch-sandbox).
+   - Шаг 2: МРТ проекта (project_mri) — диагностика стека и версионности.
+   - Шаг 3: «Не навреди» — не удаляй критические данные без бэкапа (accidental-data-loss-prevention).
+3. ПРИНЦИП САМОИСЦЕЛЕНИЯ (ACTOR-CRITIC): Если команда, тест или сборка падают с ошибкой — ты НИКОГДА НЕ ОСТАНАВЛИВАЕШЬСЯ и не перекладываешь проблему на пользователя. Анализируй ошибку, примени точечный фикс и повтори команду до победного результата.
+4. ОТВЕТ НА ВОПРОСЫ О НАБОРЕ ИНСТРУМЕНТОВ/СКИЛОВ: Четко перечисляй свои 9 встроенных хирургических инструментов и сообщай о каталоге из 116 навыков, готовых к загрузке через `consult_skill`.
+5. ЯЗЫК: Общайся на грамотном, уверенном русском языке. Форматируй ответы в Markdown.
 """
 
 TOOL_DEFINITIONS = [
@@ -34,7 +65,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "execute_command",
-            "description": "Выполнить команду в терминале (Bash на сервере или PowerShell на ПК).",
+            "description": "Выполнить команду в терминале (Bash на Linux сервере или PowerShell на ПК).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -62,7 +93,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Записать или перезаписать файл с полным рабочим кодом под ключ.",
+            "description": "Записать или перезаписать файл с полным рабочим кодом под ключ (без заглушек).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -70,6 +101,22 @@ TOOL_DEFINITIONS = [
                     "content": {"type": "string", "description": "Полный рабочий текст файла"}
                 },
                 "required": ["filepath", "content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "replace_file_content",
+            "description": "Хирургический инструмент: точечная замена существующего блока кода или текста на новый в файле без перезаписи всего остального файла.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {"type": "string", "description": "Путь к файлу"},
+                    "target_content": {"type": "string", "description": "Точный существующий фрагмент текста/кода для замены"},
+                    "replacement_content": {"type": "string", "description": "Новый фрагмент текста/кода"}
+                },
+                "required": ["filepath", "target_content", "replacement_content"]
             }
         }
     },
@@ -90,7 +137,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Поиск актуальной информации и документации в интернете.",
+            "description": "Поиск актуальной информации, документации и решений в интернете (DuckDuckGo).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -104,13 +151,40 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "fetch_page",
-            "description": "Загрузить текст веб-страницы по URL.",
+            "description": "Загрузить текст веб-страницы по URL и извлечь полезный контент.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "url": {"type": "string", "description": "URL страницы для чтения"}
                 },
                 "required": ["url"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "project_mri",
+            "description": "Выполнить диагностику и МРТ проекта (Шаг 2 Золотой Триады: стек, Git, файлы сборки и готовность к хирургическому вмешательству).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_dir": {"type": "string", "description": "Целевая папка проекта (по умолчанию '.')"}
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consult_skill",
+            "description": "Загрузить подробный регламент (SKILL.md) любого из 116 инженерных навыков SLUGA On-Demand.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {"type": "string", "description": "Название навыка (например: flutter-fix-layout-issues, bigquery-sql, anti-detect-browser, finch-sandbox, project-doctor, accidental-data-loss-prevention)"}
+                },
+                "required": ["skill_name"]
             }
         }
     }
@@ -121,9 +195,10 @@ class SlugaEngine:
     def __init__(self):
         self.memory = SlugaMemory(settings.sqlite_db_path)
         self.healer = SelfHealingEngine(self.memory)
+        self.skill_loader = SkillLoader()
 
     async def _dispatch_tool_call(self, tool_name: str, tool_args: Dict[str, Any]) -> str:
-        """Безопасный вызов локального инструмента агента."""
+        """Безопасный вызов локального хирургического или системного инструмента агента."""
         try:
             if tool_name == "execute_command":
                 cmd = tool_args.get("command", "")
@@ -141,6 +216,13 @@ class SlugaEngine:
             elif tool_name == "write_file":
                 return write_file(tool_args.get("filepath", ""), tool_args.get("content", ""))
 
+            elif tool_name == "replace_file_content":
+                return replace_file_content(
+                    tool_args.get("filepath", ""),
+                    tool_args.get("target_content", ""),
+                    tool_args.get("replacement_content", "")
+                )
+
             elif tool_name == "list_files":
                 return list_files(tool_args.get("directory", "."))
 
@@ -150,6 +232,18 @@ class SlugaEngine:
 
             elif tool_name == "fetch_page":
                 return await fetch_page(tool_args.get("url", ""))
+
+            elif tool_name == "project_mri":
+                res = diagnose_project(tool_args.get("target_dir", "."))
+                return json.dumps(res, ensure_ascii=False, indent=2)
+
+            elif tool_name == "consult_skill":
+                s_name = tool_args.get("skill_name", "")
+                content = self.skill_loader.get_skill_content(s_name)
+                if content:
+                    return f"=== РЕГЛАМЕНТ НАВЫКА {s_name} ===\n\n{content[:6000]}"
+                available = [s["name"] for s in self.skill_loader.list_skills()[:25]]
+                return f"Навык '{s_name}' не найден. Доступно 116 навыков, например: {', '.join(available)}..."
 
             else:
                 return f"Неизвестный инструмент: {tool_name}"
@@ -165,25 +259,30 @@ class SlugaEngine:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
+        clean_model = model_name.strip().strip("<>").strip()
         payload = {
-            "model": model_name,
+            "model": clean_model,
             "messages": messages,
             "tools": TOOL_DEFINITIONS,
             "tool_choice": "auto",
-            "temperature": 0.2
+            "temperature": 0.2,
+            "max_tokens": 4096
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            if resp.status_code != 200:
-                err_body = resp.text
-                try:
-                    err_json = resp.json()
-                    err_msg = err_json.get("error", {}).get("message", err_body)
-                except Exception:
-                    err_msg = err_body
-                raise RuntimeError(f"LiteAI HTTP {resp.status_code}: {err_msg}")
-            return resp.json()
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.status_code != 200:
+                    err_body = resp.text
+                    try:
+                        err_json = resp.json()
+                        err_msg = err_json.get("error", {}).get("message", err_body)
+                    except Exception:
+                        err_msg = err_body
+                    raise RuntimeError(f"LiteAI HTTP {resp.status_code}: {err_msg}")
+                return resp.json()
+        except httpx.TimeoutException:
+            raise TimeoutError(f"Превышено время ожидания LiteAI ({model_name}, таймаут 45с). Рекомендуется переключить модель на gpt-5.6-sol.")
 
     async def process_user_request(
         self,
@@ -194,19 +293,28 @@ class SlugaEngine:
         """
         Главный автономный ReAct-цикл обработки пользовательского запроса.
         """
-        # Обработка встроенных системных команд Telegram
         clean_cmd = user_prompt.strip().lower()
 
         if clean_cmd == "/start":
             return (
-                "👋 Привет! Я — **SLUGA**, автономный инженерный AI-агент.\n\n"
-                "⚡ **Возможности:**\n"
-                "• Выполнение задач в шелле и терминале серверов.\n"
-                "• Полный цикл кодинга, рефакторинг и исправление багов под ключ.\n"
-                "• Обработка голосовых сообщений и файлов со скрепки 📎.\n"
-                "• Долговременная память диалогов и контекста (SQLite).\n\n"
-                "Для выбора модели LiteAI используйте `/model`, для проверки системы — `/status`."
+                "👋 Привет! Я — **SLUGA**, автономный элитный инженер-хирург ИИ.\n\n"
+                "⚡ **Мой арсенал:**\n"
+                "• **9 встроенных инструментов прямого действия:** терминал Bash, чтение/запись файлов, хирургический скальпель `replace_file_content`, листинг директорий, веб-поиск DuckDuckGo, чтение веб-страниц, МРТ проекта `project_mri` и On-Demand загрузчик навыков `consult_skill`.\n"
+                "• **Каталог 116 инженерных навыков:** Flutter/Dart, Firebase, BigQuery, Золотая Триада, самоисцеление Actor-Critic, биоинженерия и облачные пайплайны.\n"
+                "• **Круглосуточный режим 24/7** на удаленном сервере или локальном ПК.\n\n"
+                "Для выбора модели LiteAI используйте `/model`, для проверки системы — `/status`, для списка навыков — `/skills`."
             )
+
+        if clean_cmd == "/skills":
+            skills = self.skill_loader.list_skills()
+            if not skills:
+                return "Каталог навыков пуст или инициализируется."
+            lines = [f"📚 **Каталог инженерных навыков SLUGA (всего {len(skills)} навыков):**\n"]
+            for s in skills[:30]:
+                lines.append(f"• `{s['name']}` — _{s['description']}_")
+            if len(skills) > 30:
+                lines.append(f"\n_...и еще {len(skills) - 30} навыков. Загрузка любого регламента: `consult_skill(skill_name)`._")
+            return "\n".join(lines)
 
         if clean_cmd == "/model":
             catalog_lines = ["🧠 **Официальные модели LiteAI (liteai.tech):**\n"]
@@ -220,13 +328,16 @@ class SlugaEngine:
             meta = LITEAI_MODELS_CATALOG.get(settings.liteai_model, {})
             tier_info = meta.get("consumption", "Стандартный")
             token_display = settings.sluga_bot_token[:10] + "..." if len(settings.sluga_bot_token) > 10 else settings.sluga_bot_token
+            skill_count = len(self.skill_loader.list_skills())
             return (
                 "📊 **Статус серверного агента SLUGA:**\n\n"
-                f"• **Статус:** 🟢 Онлайн (FastAPI + WebSockets)\n"
+                f"• **Статус:** 🟢 Онлайн 24/7 (SpaceWeb Uvicorn)\n"
                 f"• **Активная модель:** `{settings.liteai_model}`\n"
                 f"• **Расход токенов:** {tier_info}\n"
+                f"• **Инструментов прямого действия:** 9 (включая хирургический `replace_file_content` и `project_mri`)\n"
+                f"• **Инженерных навыков:** {skill_count} (On-Demand доступ)\n"
                 f"• **Токен связи:** `{token_display}`\n"
-                f"• **Память:** SQLite WAL (активна)\n"
+                f"• **Память:** SQLite WAL (Гибридная, скользящее окно 15 сообщений)\n"
                 f"• **Шлюз:** LiteAI Gateway (`{settings.liteai_base_url}`)"
             )
 
@@ -234,11 +345,12 @@ class SlugaEngine:
             return (
                 "❓ **Справка по командам SLUGA:**\n\n"
                 "• `/start` — запустить бота и приветствие\n"
+                "• `/skills` — каталог инженерных навыков (116 навыков)\n"
                 "• `/model` — каталог доступных моделей LiteAI и расход токенов\n"
                 "• `/status` — статус сервера, текущая модель и канал связи\n"
                 "• `/new` — начать новый диалог с чистого листа\n"
                 "• `/help` — показать эту справку\n\n"
-                "Также вы можете отправлять любые текстовые задачи, код для аудита, файлы или голосовые сообщения."
+                "Также вы можете отправлять любые текстовые задачи, код для аудита, файлы со скрепки или голосовые сообщения."
             )
 
         # 1. Проверяем наличие ключа LiteAI
@@ -253,8 +365,8 @@ class SlugaEngine:
         # 2. Сохраняем запрос пользователя в память
         self.memory.add_message(session_id, "user", user_prompt)
 
-        # 3. Собираем контекст диалога
-        history = self.memory.get_history(session_id, limit=20)
+        # 3. Собираем контекст диалога (скользящее окно 15 сообщений для памяти Variant 2)
+        history = self.memory.get_history(session_id, limit=15)
         messages: List[Dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
         for h in history:

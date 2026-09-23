@@ -1294,6 +1294,36 @@ body {
   border-color: #e53935;
   animation: shake 0.3s;
 }
+.pair-token-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.pair-token-wrap .pair-input {
+  padding-right: 46px;
+}
+.pair-btn-toggle-token {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: none;
+  color: #7f91a4;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  user-select: none;
+  line-height: 1;
+}
+.pair-btn-toggle-token:hover {
+  color: #f5f5f5;
+  background: rgba(255, 255, 255, 0.08);
+}
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25%       { transform: translateX(-6px); }
@@ -1620,7 +1650,7 @@ body {
           type="text"
           id="pairServerUrl"
           class="pair-input"
-          placeholder="77.222.40.84:8080"
+          placeholder="your-domain.ru или 123.45.67.89:8080"
           autocomplete="off"
           autocorrect="off"
           spellcheck="false"
@@ -1629,18 +1659,21 @@ body {
         <button class="pair-btn-check" id="pairBtnCheck" type="button">🔍 Проверить</button>
       </div>
       <span class="pair-server-status" id="pairServerStatus"></span>
-      <span class="pair-hint">Пример: <b>77.222.40.84:8080</b> (VPS) или <b>localhost:8080</b> (локально).<br>Схема <code>ws://</code> добавится автоматически.</span>
+      <span class="pair-hint">Пример: <b>your-domain.ru</b>, <b>123.45.67.89:8080</b> (VPS) или <b>localhost:8080</b> (локально).<br>Схема добавится автоматически.</span>
     </div>
 
     <div class="pair-field">
       <label for="pairBotToken">Bot Token</label>
-      <input
-        type="password"
-        id="pairBotToken"
-        class="pair-input"
-        placeholder="sluga-XXXX-XXXXXX"
-        autocomplete="off"
-      >
+      <div class="pair-token-wrap">
+        <input
+          type="password"
+          id="pairBotToken"
+          class="pair-input"
+          placeholder="sluga-XXXX-XXXXXX"
+          autocomplete="off"
+        >
+        <button class="pair-btn-toggle-token" id="pairBtnToggleToken" type="button" title="Показать токен">👁️</button>
+      </div>
       <span class="pair-hint">Секретный токен из файла <code>.env</code> на сервере SLUGA (<code>SLUGA_BOT_TOKEN</code>).</span>
     </div>
 
@@ -1703,16 +1736,16 @@ body {
       <div class="form-group">
         <label class="form-label" for="settingModel">Модель ИИ (официальные LiteAI)</label>
         <select class="form-select" id="settingModel">
-          <optgroup label="Anthropic Claude (LiteAI)">
-            <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6 (Оптимально для кода и архитектуры)</option>
-            <option value="claude-opus-4-8">Claude Opus 4.8 (Максимальная логика)</option>
-            <option value="claude-haiku-4-5">Claude Haiku 4.5 (Экономная / Сверхбыстрая)</option>
-          </optgroup>
-          <optgroup label="OpenAI GPT-5.x / GPT-4o">
-            <option value="gpt-5.6-sol">gpt-5.6-sol (Высокая скорость и точность)</option>
+          <optgroup label="OpenAI GPT-5.x (Рекомендуется — мгновенный ответ 3с)">
+            <option value="gpt-5.6-sol" selected>gpt-5.6-sol (Высокая скорость и точность)</option>
             <option value="gpt-5.6-luna">gpt-5.6-luna (Универсальный интеллект)</option>
             <option value="gpt-5.6-terra">gpt-5.6-terra (Большой контекст)</option>
             <option value="openai/gpt-4o">GPT-4o (Мультимодальный)</option>
+          </optgroup>
+          <optgroup label="Anthropic Claude (LiteAI)">
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Оптимально для кода)</option>
+            <option value="claude-opus-4-8">Claude Opus 4.8 (Максимальная логика)</option>
+            <option value="claude-haiku-4-5">Claude Haiku 4.5 (Экономная / Сверхбыстрая)</option>
           </optgroup>
           <optgroup label="Открытые и экономные модели (Минимальный расход токенов)">
             <option value="deepseek/deepseek-chat">DeepSeek V4 Flash (Минимальный расход)</option>
@@ -1779,10 +1812,10 @@ body {
 
 <audio id="ttsAudioPlayer" style="display: none;"></audio>
 
-<script src="./js/storage.js"></script>
-<script src="./js/websocket.js"></script>
-<script src="./js/voice.js?v=2.1.0"></script>
-<script src="./js/app.js?v=2.1.0"></script>
+<script src="./js/storage.js?v=2.1.3"></script>
+<script src="./js/websocket.js?v=2.1.3"></script>
+<script src="./js/voice.js?v=2.1.3"></script>
+<script src="./js/app.js?v=2.1.3"></script>
 
 </body>
 </html>

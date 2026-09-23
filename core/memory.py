@@ -24,6 +24,7 @@ class SlugaMemory:
         # WAL-режим для многопоточности и максимальной скорости без блокировок
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute("PRAGMA cache_size=-2000;")
         return conn
 
     def _init_db(self):
@@ -73,6 +74,16 @@ class SlugaMemory:
                 "INSERT INTO conversation_history (session_id, role, content, tool_calls, created_at) VALUES (?, ?, ?, ?, ?)",
                 (session_id, role, content, json.dumps(tool_calls, ensure_ascii=False) if tool_calls else None, time.time())
             )
+            # Вариант 2 (Гибридная память): удерживаем легкий скользящий буфер (15 сообщений) на сервере
+            conn.execute("""
+                DELETE FROM conversation_history 
+                WHERE session_id = ? 
+                  AND id NOT IN (
+                      SELECT id FROM conversation_history 
+                      WHERE session_id = ? 
+                      ORDER BY id DESC LIMIT 15
+                  )
+            """, (session_id, session_id))
             conn.commit()
 
     def get_history(self, session_id: str, limit: int = 20) -> List[Dict[str, Any]]:

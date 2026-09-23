@@ -10,6 +10,12 @@ from typing import Dict, Any, Optional, List
 
 BASE_DIR = Path(__file__).resolve().parent
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env", override=True)
+except ImportError:
+    pass
+
 # ==============================================================================
 # ОФИЦИАЛЬНЫЙ КАТАЛОГ МОДЕЛЕЙ LITEAI (https://liteai.tech/docs)
 # Таблица расхода токенов и специализаций
@@ -212,7 +218,7 @@ try:
         liteai_model: str = Field(default="claude-sonnet-4-6", alias="LITEAI_MODEL")
 
         # 3. Публичный домен (ОБЯЗАТЕЛЬНО заполнить в .env)
-        # Пример: SLUGA_DOMAIN=sugatov-it.ru
+        # Пример: SLUGA_DOMAIN=your-domain.ru
         # Сервер изнутри слушает 127.0.0.1:8080, снаружи работает ТОЛЬКО через домен.
         sluga_domain: Optional[str] = Field(default=None, alias="SLUGA_DOMAIN")
 

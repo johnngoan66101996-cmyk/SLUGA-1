@@ -36,11 +36,11 @@ def verify_bot_token(incoming_token: str) -> bool:
 
     clean_incoming = incoming_token.strip()
     configured_token = getattr(settings, "sluga_bot_token", "sluga-core-token").strip()
-
     if not configured_token or configured_token == "sluga-core-token":
         return False
 
-    return hmac.compare_digest(clean_incoming, configured_token)
+    allowed_tokens = [t.strip() for t in configured_token.split(",") if t.strip()]
+    return any(hmac.compare_digest(clean_incoming, t) for t in allowed_tokens)
 
 
 def get_or_create_bot_token() -> str:

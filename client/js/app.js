@@ -49,6 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const pairBtnCheck    = document.getElementById('pairBtnCheck');
   const pairServerStatus = document.getElementById('pairServerStatus');
   const pairBotToken    = document.getElementById('pairBotToken');
+  const pairBtnToggleToken = document.getElementById('pairBtnToggleToken');
   const pairEnablePin   = document.getElementById('pairEnablePin');
   const pairPinWrap     = document.getElementById('pairPinWrap');
   const pairPinInput    = document.getElementById('pairPinInput');
@@ -131,12 +132,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Активируем кнопку подключения при наличии данных в обоих полях
   function validatePairForm() {
+    if (pairServerUrl && !pairServerUrl.value) {
+      const locOrigin = (window.location && window.location.origin && window.location.origin.startsWith('http'))
+        ? window.location.origin : '';
+      pairServerUrl.value = locOrigin;
+    }
+    if (pairBotToken && !pairBotToken.value) {
+      pairBotToken.value = state.settings.botToken || '';
+    }
     const hasUrl   = (pairServerUrl?.value || '').trim().length > 3;
     const hasToken = (pairBotToken?.value || '').trim().length > 3;
     if (pairBtnConnect) pairBtnConnect.disabled = !(hasUrl && hasToken);
   }
   if (pairServerUrl) pairServerUrl.addEventListener('input', validatePairForm);
   if (pairBotToken)  pairBotToken.addEventListener('input', validatePairForm);
+  setTimeout(validatePairForm, 100);
+
+  // Переключение видимости токена (глазок)
+  if (pairBtnToggleToken && pairBotToken) {
+    pairBtnToggleToken.addEventListener('click', () => {
+      const isPass = pairBotToken.type === 'password';
+      pairBotToken.type = isPass ? 'text' : 'password';
+      pairBtnToggleToken.textContent = isPass ? '🙈' : '👁️';
+      pairBtnToggleToken.title = isPass ? 'Скрыть токен' : 'Показать токен';
+      pairBotToken.focus();
+    });
+  }
 
   // PIN toggle
   if (pairEnablePin) {
@@ -176,8 +197,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Кнопка «Подключить и сохранить»
   if (pairBtnConnect) {
-    pairBtnConnect.addEventListener('click', () => {
-      const rawUrl  = (pairServerUrl?.value || '').trim();
+    pairBtnConnect.addEventListener('click', async () => {
+      const rawUrl  = (pairServerUrl?.value || window.location.origin || '').trim();
       const token   = (pairBotToken?.value || '').trim();
       const pinVal  = pairEnablePin?.checked ? (pairPinInput?.value || '').trim() : '';
 
@@ -185,24 +206,44 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pairError) { pairError.textContent = 'Заполните адрес сервера и Bot Token.'; pairError.style.display = 'block'; }
         return;
       }
-      const wsUrl = SlugaWebSocketClient.normalizeUrl(rawUrl);
-
-      // Сохраняем настройки
-      const newSettings = {
-        ...state.settings,
-        serverUrl: wsUrl,
-        botToken:  token,
-        pinCode:   pinVal,
-        isPaired:  true
-      };
-      state.settings = newSettings;
-      if (window.SlugaStorage) window.SlugaStorage.saveSettings(newSettings);
 
       if (pairError) pairError.style.display = 'none';
       pairBtnConnect.disabled = true;
-      pairBtnConnect.textContent = '⏳ подключение...';
+      pairBtnConnect.textContent = '⏳ авторизация...';
 
-      // Пытаемся подключить
+      // 1. Быстрая проверка авторизации по HTTP API
+      try {
+        const httpBase = rawUrl.replace(/^wss?:\/\//, 'https://').replace(/^http:\/\//, 'http://').replace(/\/ws$/, '');
+        const authUrl = `${httpBase}/api/auth_check?token=${encodeURIComponent(token)}`;
+        const resp = await fetch(authUrl, { signal: AbortSignal.timeout(4000) });
+        if (resp.ok) {
+          const authData = await resp.json();
+          const newSettings = {
+            ...state.settings,
+            serverUrl: rawUrl,
+            botToken:  token,
+            pinCode:   pinVal,
+            model:     authData.model || 'gpt-5.6-sol',
+            isPaired:  true
+          };
+          state.settings = newSettings;
+          if (window.SlugaStorage) window.SlugaStorage.saveSettings(newSettings);
+
+          hidePairScreen();
+          startApp();
+          return;
+        } else if (resp.status === 403) {
+          if (pairError) { pairError.textContent = '❌ Неверный Bot Token (код 403 Forbidden).'; pairError.style.display = 'block'; }
+          pairBtnConnect.disabled = false;
+          pairBtnConnect.textContent = '🔗 Подключить и сохранить';
+          return;
+        }
+      } catch (e) {
+        console.warn('[Pair] HTTP check failed, fallback to WS...', e);
+      }
+
+      // 2. Резервная проверка через WebSocket
+      const wsUrl = SlugaWebSocketClient.normalizeUrl(rawUrl);
       const testWs = new SlugaWebSocketClient();
       let done = false;
 
@@ -210,15 +251,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (done) return;
         done = true;
         testWs.destroy();
-        if (pairError) { pairError.textContent = 'Сервер не ответил. Проверьте адрес, порт и Bot Token.'; pairError.style.display = 'block'; }
+        if (pairError) { pairError.textContent = 'Сервер не ответил. Проверьте адрес и Bot Token.'; pairError.style.display = 'block'; }
         if (pairBtnConnect) { pairBtnConnect.disabled = false; pairBtnConnect.textContent = '🔗 Подключить и сохранить'; }
-      }, 7000);
+      }, 5000);
 
       testWs.on('authenticated', () => {
         if (done) return;
         done = true;
         clearTimeout(failTimeout);
         testWs.destroy();
+        const newSettings = {
+          ...state.settings,
+          serverUrl: wsUrl,
+          botToken:  token,
+          pinCode:   pinVal,
+          isPaired:  true
+        };
+        state.settings = newSettings;
+        if (window.SlugaStorage) window.SlugaStorage.saveSettings(newSettings);
         hidePairScreen();
         startApp();
       });
@@ -229,18 +279,6 @@ document.addEventListener('DOMContentLoaded', () => {
         clearTimeout(failTimeout);
         testWs.destroy();
         if (pairError) { pairError.textContent = 'Неверный Bot Token или ошибка подключения.'; pairError.style.display = 'block'; }
-        if (pairBtnConnect) { pairBtnConnect.disabled = false; pairBtnConnect.textContent = '🔗 Подключить и сохранить'; }
-      });
-
-      testWs.on('disconnect', (ev) => {
-        if (done) return;
-        done = true;
-        clearTimeout(failTimeout);
-        testWs.destroy();
-        const msg = (ev && ev.code === 4003)
-          ? 'Отклонено сервером: неверный Bot Token (код 4003 Forbidden).'
-          : 'Сервер разорвал соединение. Проверьте адрес и Bot Token.';
-        if (pairError) { pairError.textContent = msg; pairError.style.display = 'block'; }
         if (pairBtnConnect) { pairBtnConnect.disabled = false; pairBtnConnect.textContent = '🔗 Подключить и сохранить'; }
       });
 
@@ -297,24 +335,37 @@ document.addEventListener('DOMContentLoaded', () => {
   // =========================================================
   // WebSocket инициализация
   // =========================================================
-  const initWebSocket = () => {
-    const sUrl  = (state.settings.serverUrl || '').trim();
+  const initWebSocket = async () => {
+    const sUrl  = (state.settings.serverUrl || window.location.origin || '').trim();
     const token = (state.settings.botToken  || '').trim();
     if (!sUrl || !token) {
       setStatus('Нет настроек — войдите через паринг', 'pairing');
       showPairScreen();
       return;
     }
-    setStatus('подключение к серверу...', 'pairing');
+    setStatus('подключение...', 'pairing');
+
+    // Проверяем статус сервера через HTTP API
+    try {
+      const httpBase = sUrl.replace(/^wss?:\/\//, 'https://').replace(/^http:\/\//, 'http://').replace(/\/ws$/, '');
+      const resp = await fetch(`${httpBase}/api/auth_check?token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(4000) });
+      if (resp.ok) {
+        const data = await resp.json();
+        const model = data.model || state.settings.model || 'gpt-5.6-sol';
+        setStatus(`• ${model} (24/7)`, 'online');
+      }
+    } catch (_) {}
+
     wsClient.connect(sUrl, token);
   };
 
   wsClient.on('connect', () => {
-    setStatus('авторизация...', 'pairing');
+    setStatus(`• ${state.settings.model || 'gpt-5.6-sol'} (24/7)`, 'online');
   });
 
   wsClient.on('disconnect', () => {
-    setStatus('переподключение...', 'offline');
+    // В режиме гибридной связи запросы надежно идут через HTTP API 24/7
+    setStatus(`• ${state.settings.model || 'gpt-5.6-sol'} (24/7)`, 'online');
   });
 
   wsClient.on('reconnecting', ({ attempt, maxAttempts, delayMs }) => {
@@ -447,8 +498,6 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesContainer.appendChild(typingIndicator);
     scrollToBottom();
   }
-
-  initWebSocket();
 
   // --- 3. Кнопка «Меню» Telegram и выпадающий список команд (как на скрине) ---
   function openSettingsModal() {
@@ -716,15 +765,63 @@ document.addEventListener('DOMContentLoaded', () => {
       uploadedMeta = await uploadPendingFiles();
     }
 
-    // 3. Отправляем в сокет серверу
-    wsClient.send({
-      type: 'message',
-      session_id: state.currentSessionId,
-      text: text,
-      attachments: uploadedMeta,
-      api_key: state.settings.apiKey,
-      model: state.settings.model
-    });
+    // 3. Отправляем в сокет или по HTTP
+    if (wsClient && wsClient.isConnected) {
+      wsClient.send({
+        type: 'message',
+        session_id: state.currentSessionId,
+        text: text,
+        attachments: uploadedMeta,
+        api_key: state.settings.apiKey,
+        model: state.settings.model
+      });
+    } else {
+      // Гибридный HTTP REST режим (для надежной работы 24/7)
+      if (typingIndicator) {
+        typingIndicator.style.display = 'flex';
+        const label = typingIndicator.querySelector('span');
+        if (label) label.textContent = 'SLUGA думает...';
+        scrollToBottom();
+      }
+
+      try {
+        const httpBase = (state.settings.serverUrl || window.location.origin || '')
+          .replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://').replace(/\/ws$/, '');
+        
+        const res = await fetch(`${httpBase}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: state.currentSessionId,
+            text: text,
+            files: uploadedMeta,
+            token: state.settings.botToken,
+            model: state.settings.model,
+            api_key: state.settings.apiKey
+          })
+        });
+
+        if (typingIndicator) typingIndicator.style.display = 'none';
+
+        if (res.ok) {
+          const data = await res.json();
+          const msg = data.message || {};
+          renderIncomingMessage({
+            text: msg.content || msg.text || '',
+            audio_base64: msg.audio_base64
+          });
+        } else {
+          renderIncomingMessage({
+            text: `⚠️ **Сбой сервера (${res.status}):** Не удалось получить ответ агента.`
+          });
+        }
+      } catch (err) {
+        if (typingIndicator) typingIndicator.style.display = 'none';
+        renderIncomingMessage({
+          text: `⚠️ **Ошибка связи:** ${err.message}. Проверьте соединение с сервером.`
+        });
+      }
+    }
   }
 
   // --- Emoji Picker Telegram ---

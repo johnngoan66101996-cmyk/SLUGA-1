@@ -241,7 +241,7 @@ elif [ "${USE_DOMAIN:-false}" = true ]; then
     if [ -n "$SAVED_DOMAIN" ]; then
         PROMPT_TEXT="   Введите имя домена [по умолчанию: $SAVED_DOMAIN]: "
     else
-        PROMPT_TEXT="   Введите имя домена (например, sugatov-it.ru): "
+        PROMPT_TEXT="   Введите имя домена (например, your-domain.ru): "
     fi
     read -p "$PROMPT_TEXT" USER_DOMAIN
     [ -z "$USER_DOMAIN" ] && USER_DOMAIN="${SAVED_DOMAIN:-ваш-домен.ru}"

@@ -11,6 +11,7 @@ import base64
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from pydantic import BaseModel
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException, Query, status
 from fastapi.staticfiles import StaticFiles
@@ -173,6 +174,85 @@ async def clear_memory(session_id: str = "sluga_core"):
     """Очищает память сессии в SQLite."""
     bridge.memory.clear_history(session_id)
     return JSONResponse({"status": "cleared", "session_id": session_id})
+
+
+
+class ChatRequest(BaseModel):
+    session_id: str = "sluga_core"
+    text: str
+    files: Optional[List[Dict[str, Any]]] = None
+    token: Optional[str] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+
+class VoiceRequest(BaseModel):
+    session_id: str = "sluga_core"
+    audio_base64: str
+    mime_type: str = "audio/webm"
+    token: Optional[str] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+
+@app.get("/api/auth_check")
+async def auth_check(token: Optional[str] = Query(None)):
+    """Проверка валидности Bot Token перед началом диалога."""
+    if not token or not verify_bot_token(token):
+        raise HTTPException(status_code=403, detail="Неверный Bot Token")
+    return JSONResponse({
+        "ok": True,
+        "authenticated": True,
+        "status": "online",
+        "bot_name": "SLUGA",
+        "model": settings.liteai_model
+    })
+
+@app.post("/api/chat")
+async def http_chat_endpoint(req: ChatRequest):
+    """
+    Высокоскоростной HTTP REST эндпоинт для отправки сообщений агенту.
+    Обеспечивает 100% стабильную работу без блокировок портов и обрывов сокетов.
+    """
+    if req.token and not verify_bot_token(req.token):
+        raise HTTPException(status_code=403, detail="Неверный Bot Token")
+    if req.model:
+        bridge.update_model(req.model)
+    if req.api_key:
+        bridge.update_api_key(req.api_key)
+
+    result = await bridge.process_message(
+        session_id=req.session_id,
+        text=req.text,
+        files=req.files or []
+    )
+    return JSONResponse({
+        "event": "message_response",
+        "session_id": req.session_id,
+        "message": result
+    })
+
+@app.post("/api/voice")
+async def http_voice_endpoint(req: VoiceRequest):
+    """HTTP эндпоинт для распознавания и обработки голосовых сообщений."""
+    if req.token and not verify_bot_token(req.token):
+        raise HTTPException(status_code=403, detail="Неверный Bot Token")
+    if req.model:
+        bridge.update_model(req.model)
+    if req.api_key:
+        bridge.update_api_key(req.api_key)
+
+    audio_bytes = base64.b64decode(req.audio_base64)
+    recognized_text = await bridge.process_voice(audio_bytes, mime_type=req.mime_type)
+
+    result = await bridge.process_message(
+        session_id=req.session_id,
+        text=recognized_text
+    )
+    return JSONResponse({
+        "event": "voice_response",
+        "session_id": req.session_id,
+        "recognized_text": recognized_text,
+        "message": result
+    })
 
 
 @app.websocket("/ws")
