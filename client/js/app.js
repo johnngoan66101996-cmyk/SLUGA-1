@@ -1031,10 +1031,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Регистрация PWA Service Worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(err => {
+    const swPath = new URL('sw.js', window.location.href).href;
+    navigator.serviceWorker.register(swPath).catch(err => {
       console.log('[PWA] ServiceWorker info:', err);
     });
   }
+
+  // PWA Установка на Android / Десктоп
+  let deferredInstallPrompt = null;
+  const pwaInstallGroup = document.getElementById('pwaInstallGroup');
+  const btnInstallPwa = document.getElementById('btnInstallPwa');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (pwaInstallGroup) pwaInstallGroup.style.display = 'block';
+  });
+
+  if (btnInstallPwa) {
+    btnInstallPwa.addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        console.log('[PWA] Результат выбора пользователя:', outcome);
+        deferredInstallPrompt = null;
+        if (pwaInstallGroup) pwaInstallGroup.style.display = 'none';
+      } else {
+        alert('Для установки на телефон:\n1. Нажмите меню браузера (три точки ⋮ в правом верхнем углу)\n2. Выберите «Установить приложение» или «Добавить на главный экран»');
+      }
+    });
+  }
+
+  window.addEventListener('appinstalled', () => {
+    console.log('[PWA] SlugaGram успешно установлен как приложение');
+    if (pwaInstallGroup) pwaInstallGroup.style.display = 'none';
+    deferredInstallPrompt = null;
+  });
 
 
   // --- 9. Рендеринг пузырей сообщений ---

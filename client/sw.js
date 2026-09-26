@@ -3,7 +3,7 @@
  * Обеспечивает мгновенную загрузку оболочки приложения, кэширование и автономность
  */
 
-const CACHE_NAME = 'slugagram-v1';
+const CACHE_NAME = 'slugagram-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
