@@ -11,8 +11,10 @@ const SlugaStorage = {
 
   // Дефолтные настройки
   getDefaultSettings() {
+    const loc = (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin.startsWith('http'))
+      ? window.location.origin : '';
     return {
-      serverUrl: '',
+      serverUrl: loc,
       botToken: '',
       model: 'gpt-5.6-sol',
       voiceAutoplay: true,

@@ -56,6 +56,41 @@ document.addEventListener('DOMContentLoaded', () => {
   const pairBtnConnect  = document.getElementById('pairBtnConnect');
   const pairError       = document.getElementById('pairError');
 
+  // Helper для нормализации HTTP URL (работает для http://, https://, ws://, wss:// и голых доменов)
+  function toHttpUrl(raw) {
+    let url = (raw || (typeof window !== 'undefined' && window.location ? window.location.origin : '') || '').trim();
+    if (!url) return (typeof window !== 'undefined' && window.location ? window.location.origin : '');
+    if (!/^https?:\/\//i.test(url)) {
+      if (/^wss:\/\//i.test(url)) {
+        url = 'https://' + url.slice(6);
+      } else if (/^ws:\/\//i.test(url)) {
+        url = 'http://' + url.slice(5);
+      } else {
+        const isHttps = (typeof window !== 'undefined' && window.location && window.location.protocol === 'https:');
+        url = (isHttps ? 'https://' : 'http://') + url;
+      }
+    }
+    return url.replace(/\/ws\/?$/i, '').replace(/\/+$/, '');
+  }
+
+  // Загрузка истории чата из SQLite по HTTP REST API
+  async function loadHistoryOverHttp() {
+    try {
+      const httpBase = toHttpUrl(state.settings.serverUrl);
+      const token = state.settings.botToken;
+      if (!httpBase || !token) return;
+      const res = await fetch(`${httpBase}/api/history/${state.currentSessionId}?token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const history = await res.json();
+        if (Array.isArray(history) && history.length > 0) {
+          renderChatHistory(history);
+        }
+      }
+    } catch (e) {
+      console.warn('[History] HTTP load info:', e);
+    }
+  }
+
   // --- Инстансы ---
   const wsClient = new SlugaWebSocketClient();
   const voiceManager = new SlugaVoiceManager();
@@ -170,12 +205,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Кнопка «Проверить» — делаем GET /api/info без токена
   if (pairBtnCheck) {
     pairBtnCheck.addEventListener('click', async () => {
-      const rawUrl = (pairServerUrl?.value || '').trim();
+      const rawUrl = (pairServerUrl?.value || window.location.origin || '').trim();
       if (!rawUrl) return;
-      const wsUrl = SlugaWebSocketClient.normalizeUrl(rawUrl);
-      // Преобразуем ws:// → http:// для fetch
-      const httpUrl = wsUrl.replace(/^ws:\/\//, 'http://').replace(/^wss:\/\//, 'https://')
-                           .replace(/\/ws$/, '/api/info');
+      const httpBase = toHttpUrl(rawUrl);
+      const httpUrl = `${httpBase}/api/info`;
       pairBtnCheck.disabled = true;
       if (pairServerStatus) { pairServerStatus.textContent = '⏳ проверка...'; pairServerStatus.style.color = '#ff9800'; }
       try {
@@ -1311,6 +1344,44 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Функция тестирования подключения ---
   window.testSlugaConnection = async function() {
+    const testResultEl = document.getElementById('connectionTestResult');
+    const inputUrl = document.getElementById('settingServerUrl');
+    const inputToken = document.getElementById('settingBotToken');
+    const rawUrl = (inputUrl ? inputUrl.value : state.settings.serverUrl || window.location.origin || '').trim();
+    const token = (inputToken ? inputToken.value : (state.settings.botToken || '')).trim();
+
+    if (!testResultEl) return;
+    testResultEl.textContent = '⏱️ Проверяю подключение...';
+    testResultEl.style.color = '#aaa';
+
+    const httpBase = toHttpUrl(rawUrl);
+
+    try {
+      const authUrl = `${httpBase}/api/auth_check?token=${encodeURIComponent(token)}`;
+      const resp = await fetch(authUrl, { signal: AbortSignal.timeout(5000) });
+      if (resp.ok) {
+        const data = await resp.json();
+        const model = data.model || 'gpt-5.6-sol';
+        testResultEl.textContent = `✅ Сервер онлайн! Токен принят. Модель: ${model} (24/7)`;
+        testResultEl.style.color = '#4fae4e';
+        return;
+      } else if (resp.status === 403) {
+        testResultEl.textContent = '❌ Неверный Bot Token (код 403 Forbidden).';
+        testResultEl.style.color = '#e53935';
+        return;
+      } else {
+        testResultEl.textContent = `⚠️ Ответ сервера HTTP ${resp.status}`;
+        testResultEl.style.color = '#ff9800';
+        return;
+      }
+    } catch (e) {
+      testResultEl.textContent = `❌ Ошибка связи: ${e.message}`;
+      testResultEl.style.color = '#e53935';
+      return;
+    }
+  };
+
+  const _legacyTestSlugaConnection = async function() {
     const testResultEl = document.getElementById('connectionTestResult');
     const inputUrl = document.getElementById('settingServerUrl');
     const inputToken = document.getElementById('settingBotToken');
